@@ -13,4 +13,4 @@ Visit the [Running a COTI Node](https://docs.coti.io/coti-documentation/running-
 
 ### Reporting Issues
 
-If you encounter any bugs or issues, please report them by [opening an issue](https://github.com/coti-io/coti-full-node/new) on GitHub. Include as much detail as possible, including steps to reproduce the bug, the environment you encountered it in, and any other relevant information.
+If you encounter any bugs or issues, please report them by [opening an issue](https://github.com/coti-io/coti-full-node/issues/new) on GitHub. Include as much detail as possible, including steps to reproduce the bug, the environment you encountered it in, and any other relevant information.
