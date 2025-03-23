@@ -1,8 +1,7 @@
 services:
- # Sets up the genesis configuration for the go-ethereum client from a JSON file.
-  coti-full-node-genesis:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node-genesis
+  mainnet-fullnode-genesis:
+    image: coti/mainnet-full-node:1.1.3
+    container_name: mainnet-fullnode-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
       - ./execution/:/execution
@@ -12,16 +11,16 @@ services:
         max-size: "10m"
         max-file: "1"
 
-  coti-full-node:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node
+  mainnet-fullnode:
+    image: coti/mainnet-full-node:1.1.3
+    container_name: mainnet-fullnode
     command:
       - --soda.engine
-      - --soda.seqaddr=0x7d9938777950631645B5B16057A2c52391a8e787
-      - --soda.exec1addr=0x787A4bB8677189682AD2AFf2becB78A2ED9d1241
-      - --soda.exec2addr=0x183B8933c370A2736c9766379349D72154Bd0b8f
-      - --soda.validator
-      - --networkid=7082400
+      - --soda.seqaddr=0xB557a07a397B5c9C94FC44260dE6C8A45EF5e731
+      - --soda.exec1addr=0x86d624fF6534506678FbBa569468CEf4e2d87749
+      - --soda.exec2addr=0x1f5Fdff75e1CfEae39a6aaBb62CE78BfAA0B239d
+      - --soda.validator      
+      - --networkid=2632500
       - --http
       - --http.api=eth,net,web3,txpool
       - --http.corsdomain=*
@@ -35,22 +34,22 @@ services:
       - --syncmode=full
       - --ws
       - --ws.port=8546
-      - --ws.addr=0.0.0.0
+      - --ws.addr=mainnet-fullnode
       - --ws.origins=*
       - --ws.api=web3,eth
       - --metrics
       - --metrics.expensive
-      - --metrics.addr=0.0.0.0
+      - --metrics.addr=mainnet-fullnode
       - --rpc.allow-unprotected-txs=true
       - --miner.gasprice=5000000
-      - --bootnodes=enode://8c14ae1db71cc9796bf04cf3cc5508291621bc8b9c4c80d4d7b79d8e4b33eadcfc2298242362443fd1317c5ac887dae8e8fe9c551d7792f2bc2e7177978f730a@147.135.77.48:7400,enode://820748e65666a7444199808ecbe80f4133fa9faa7618520eb6577466336daef7aa40910a2d03dd93766ccb7b93fecdfd1a9ff32e01217235fddc3c990928fa16@63.176.21.19:7400
+      - --bootnodes=enode://d6d9087c70eba1fd80a77dcda8a2441876e1a94fa83a3650eebeafc14df59d7e0a43cebf5f03705c119f6a91d78bceeab897fde757d8e5178eda987fb35f6d31@40.160.230.79:7400
       - --nat=extip:${FULLNODE_EXT_IP}
     ports:
       - 8545:8545
       - 8546:8546
       - 7400:7400
     depends_on:
-      coti-full-node-genesis:
+      mainnet-fullnode-genesis:
         condition: service_completed_successfully
     volumes:
       - ./execution/:/execution/
