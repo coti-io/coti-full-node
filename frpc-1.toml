@@ -1,0 +1,26 @@
+serverAddr = "virginia.fullnode.mainnet.coti.io"
+serverPort = 7000
+
+[[proxies]]
+name = "replace-me.fullnode.mainnet.coti.io-rpc"
+type = "http"
+localIP = "coti-mainnet-full-node"
+localPort = 8545
+customDomains = ["replace-me.fullnode.mainnet.coti.io"]
+locations = ["/rpc"]
+
+[[proxies]]
+name = "replace-me.fullnode.mainnet.coti.io-ws"
+type = "http"
+localIP = "coti-mainnet-full-node"
+localPort = 8546
+customDomains = ["replace-me.fullnode.mainnet.coti.io"]
+locations = ["/ws"]
+
+[[proxies]]
+name = "replace-me.fullnode.mainnet.coti.io-operator"
+type = "http"
+localIP = "coti-mainnet-operator-dashboard"
+localPort = 8090
+customDomains = ["replace-me.fullnode.mainnet.coti.io"]
+locations = ["/operator"]

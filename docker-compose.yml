@@ -1,27 +1,32 @@
+# Chain data uses a named volume so Geth can create geth.ipc (Unix socket). Bind-mounting
+# ./execution from WSL /mnt/c/... fails with "bind: operation not supported" for IPC.
+# Volume name is testnet-specific so a mainnet stack can use a separate volume (e.g. coti-mainnet-execution-data).
+volumes:
+  coti-mainnet-execution-data:
 services:
- # Sets up the genesis configuration for the go-ethereum client from a JSON file.
-  coti-full-node-genesis:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node-genesis
+  # Sets up the genesis configuration for the go-ethereum client from a JSON file.
+  coti-mainnet-full-node-genesis:
+    image: coti/mainnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
+    container_name: coti-mainnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
-      - ./execution/:/execution
+      - coti-mainnet-execution-data:/execution
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "1"
 
-  coti-full-node:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node
+  coti-mainnet-full-node:
+    image: coti/mainnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
+    container_name: coti-mainnet-full-node
     command:
       - --soda.engine
-      - --soda.seqaddr=0x7d9938777950631645B5B16057A2c52391a8e787
-      - --soda.exec1addr=0x787A4bB8677189682AD2AFf2becB78A2ED9d1241
-      - --soda.exec2addr=0x183B8933c370A2736c9766379349D72154Bd0b8f
-      - --soda.validator
-      - --networkid=7082400
+      - --soda.seqaddr=0xB557a07a397B5c9C94FC44260dE6C8A45EF5e731
+      - --soda.exec1addr=0x86d624fF6534506678FbBa569468CEf4e2d87749
+      - --soda.exec2addr=0x1f5Fdff75e1CfEae39a6aaBb62CE78BfAA0B239d
+      - --soda.validator      
+      - --networkid=2632500
       - --http
       - --http.api=eth,net,web3,txpool
       - --http.corsdomain=*
@@ -29,7 +34,7 @@ services:
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --port=7400
-      - --identity=${FULLNODE_DNS_ADDRESS}
+      - --identity=${FULLNODE_FQDN}
       - --verbosity=3
       - --datadir=/execution
       - --syncmode=full
@@ -43,20 +48,111 @@ services:
       - --metrics.addr=0.0.0.0
       - --rpc.allow-unprotected-txs=true
       - --miner.gasprice=5000000
-      - --bootnodes=enode://8c14ae1db71cc9796bf04cf3cc5508291621bc8b9c4c80d4d7b79d8e4b33eadcfc2298242362443fd1317c5ac887dae8e8fe9c551d7792f2bc2e7177978f730a@147.135.77.48:7400,enode://820748e65666a7444199808ecbe80f4133fa9faa7618520eb6577466336daef7aa40910a2d03dd93766ccb7b93fecdfd1a9ff32e01217235fddc3c990928fa16@63.176.21.19:7400
+      - --bootnodes=enode://d6d9087c70eba1fd80a77dcda8a2441876e1a94fa83a3650eebeafc14df59d7e0a43cebf5f03705c119f6a91d78bceeab897fde757d8e5178eda987fb35f6d31@40.160.230.79:7400,enode://9b6c699af8c180e03028fb661cb4cc149e1e58b467ae4b23c0301fe010c429ee47c67919bf5fdfdf8a8386002001d272b001581cb2bf297237ab95f9d7586a40@63.182.134.0:7400,enode://470b736ad52e7ea03b352dbcea61e51254808eb5b0f57a0f65849c13117fa6ec38b09fa8ee1b2bdc2973249fe263c2ef3f408adc0f66ac68b62ea119caad02d5@15.204.207.122:7400,enode://48a67162679e35b025bf189538ef5402bf4fe03b224dfaf64ae7036da26ebec8061ca3455ae20a0f57a8e4672c18640e6fc0f8d08eb0b593bd6ee4db831bc540@54.168.47.115:7400
       - --nat=extip:${FULLNODE_EXT_IP}
     ports:
       - 8545:8545
       - 8546:8546
       - 7400:7400
+      - 7400:7400/udp
     depends_on:
-      coti-full-node-genesis:
+      coti-mainnet-full-node-genesis:
         condition: service_completed_successfully
     volumes:
-      - ./execution/:/execution/
-      - ./execution/keystore:/execution/keystore
+      - coti-mainnet-execution-data:/execution/
+      - ./nodekey:/execution/geth/nodekey
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "5"
+
+  # Local-only status page for operators (open http://127.0.0.1:8090 on the host).
+  coti-mainnet-operator-dashboard:
+    build:
+      context: ./operator-dashboard
+    container_name: coti-mainnet-operator-dashboard
+    restart: unless-stopped
+    depends_on:
+      coti-mainnet-full-node:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      LISTEN_PORT: "8090"
+      RPC_URL: http://coti-mainnet-full-node:8545
+      FULLNODE_FQDN: ${FULLNODE_FQDN:-}
+      FULLNODE_EXT_IP: ${FULLNODE_EXT_IP:-}
+      NGINX_ENABLED: ${NGINX_ENABLED:-false}
+      FRPC_ENABLED: ${FRPC_ENABLED:-false}
+      FRPC_CUSTOM_DOMAIN: ${FRPC_CUSTOM_DOMAIN:-}
+      FRPS_SERVER_ADDR: ${FRPS_SERVER_ADDR:-}
+      FRPS_SERVER_ADDR_1: ${FRPS_SERVER_ADDR_1:-virginia.fullnode.mainnet.coti.io}
+      FRPS_SERVER_PORT: ${FRPS_SERVER_PORT:-7000}
+
+  frpc-1:
+    image: fatedier/frpc:v0.61.2
+    container_name: coti-mainnet-frpc-1
+    restart: unless-stopped
+    profiles:
+      - frpc
+    depends_on:
+      coti-mainnet-full-node:
+        condition: service_started
+      coti-mainnet-operator-dashboard:
+        condition: service_started
+    command:
+      - -c
+      - /etc/frp/frpc.toml
+    volumes:
+      - ./frpc-1.toml:/etc/frp/frpc.toml:ro
+
+  frpc-2:
+    image: fatedier/frpc:v0.61.2
+    container_name: coti-mainnet-frpc-2
+    restart: unless-stopped
+    profiles:
+      - frpc
+    depends_on:
+      coti-mainnet-full-node:
+        condition: service_started
+      coti-mainnet-operator-dashboard:
+        condition: service_started
+    command:
+      - -c
+      - /etc/frp/frpc.toml
+    volumes:
+      - ./frpc-2.toml:/etc/frp/frpc.toml:ro
+
+  # Temporary Nginx for SSL setup only (Certbot ACME challenge). Use: docker-compose --profile setup up -d nginx-init
+  nginx-init:
+    image: nginx:1.15-alpine
+    container_name: nginx-init
+    profiles:
+      - setup
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/certbot:/var/www/certbot
+      - ./nginx/nginx-init_default.conf:/etc/nginx/conf.d/default.conf
+
+  nginx:
+    image: nginx:1.15-alpine
+    container_name: nginx
+    profiles:
+      - proxy-nginx
+    depends_on:
+      coti-mainnet-full-node:
+        condition: service_started
+      coti-mainnet-operator-dashboard:
+        condition: service_started
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/certbot:/var/www/certbot
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"

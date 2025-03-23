@@ -1,0 +1,50 @@
+#!/bin/bash
+# Reset full node when node panics with "Head state missing" or database corruption.
+# Preserves nodekey (host file). Drops chain data (Docker named volume) and requires full re-sync after running.
+
+set -e
+
+# Choose compose command: prefer "docker compose" (v2 plugin) when available
+if docker compose version >/dev/null 2>&1; then
+    DC="docker compose"
+else
+    DC="docker-compose"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+# --- ROOT CHECK ---
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root."
+    echo
+    echo "Example:"
+    echo '  sudo ./reset_coti-full-node.sh'
+    exit 1
+fi
+
+echo "WARNING: This will delete all chain data (Docker volume). The node will need to re-sync from genesis."
+echo "Your ./nodekey file on this host is preserved."
+read -p "Continue? (y/N): " CONFIRM
+if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
+    echo "Aborted."
+    exit 1
+fi
+
+# installer.env first (packaging defaults), then .env (this host).
+if [ -f installer.env ] || [ -f .env ]; then
+    set -a
+    # shellcheck source=/dev/null
+    [ -f installer.env ] && . ./installer.env
+    # shellcheck source=/dev/null
+    [ -f .env ] && . ./.env
+    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
+    export DOCKER_FULL_NODE_IMAGE_VERSION
+    set +a
+fi
+
+ALL_PROFILE_ARGS=(--profile frpc --profile proxy-nginx --profile setup)
+echo "--> Stopping containers and removing chain volume (nodekey on host is preserved)..."
+$DC "${ALL_PROFILE_ARGS[@]}" down -v 2>/dev/null || true
+
+echo "--> Done. Run ./start_coti-full-node.sh to re-init and re-sync."
