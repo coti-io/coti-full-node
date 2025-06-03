@@ -1,0 +1,165 @@
+COTI V2 NFT and Node Licenses - Terms &amp; Conditions
+
+1. Introduction
+These Terms &amp; Conditions (the &quot;Terms&quot;) constitute a legally binding agreement
+between you (&quot;User,&quot; &quot;you,&quot; or &quot;your&quot;) and CV2 Innovation Limited (&quot;Company,&quot;
+&quot;we,&quot; &quot;us,&quot; or &quot;our&quot;), governing the usage of COTI V2 Node Licenses issued as non-
+fungible tokens (each, an “NFT”), which function solely as network access
+credentials for operating a validator node and/or facilitating treasury within the COTI
+network (the &quot;Services&quot;). By accessing or using the Services, you agree to comply
+with and be bound by the terms and conditions set forth in these Terms. If you do not
+agree to these terms, you must not use the Services.
+These Terms apply to you if you: Mint, purchase, acquire, or hold a NFT; Use a NFT
+to operate a validator node or manage a COTI treasury smart contract; Interact with
+any part of the protocol infrastructure operated, maintained, or governed by CV2 or
+the COTI Foundation, including but not limited to staking mechanisms, validator
+dashboards, APIs, UIs, or smart contracts related to NFTs or COTI treasury pools.
+These Terms do not apply to ones who merely download or use open-source code
+from public repositories (such as GitHub) unless and until they engage in one of the
+activities described above. Certain components of the COTI V2 protocol, including
+node software and smart contracts, are made available under open-source licenses,
+such as the Apache License, Version 2.0, and Nothing in these Terms modifies or
+overrides your rights under such licenses.
+2. Eligibility and Compliance
+2.1. The Services are only available to individuals who are at least 18 years old
+and have the legal capacity to enter into and perform contractual obligations
+under the laws applicable to them.
+2.2. The Services are not offered or intended for use by individuals or entities in
+any jurisdiction where the sale or purchase of NFTs or similar digital assets is
+restricted or prohibited by law. You are prohibited from accessing or using
+the Services if you are a resident or citizen of any jurisdiction listed in the
+Prohibited Jurisdictions as defined below.
+2.3. You agree to comply with all applicable laws, including those related to anti-
+money laundering (AML), counter-terrorism financing (CTF), and economic
+sanctions. You acknowledge and agree that it is your responsibility to ensure
+that your use of the Services is legal in your jurisdiction.
+2.4. Operators manage their node and treasury settings via a dedicated Node
+Dashboard, which also facilitates minting and managing Node NFTs.
+3. User Representations and Warranties
+By using the Services, you represent and warrant that:
+
+3.1. You have full power, authority, and capacity to enter into these Terms and to
+perform all of your obligations hereunder.
+3.2. The digital assets and funds you use to purchase the NFT(s) are legally and
+beneficially owned by you, and they do not originate from any illegal activity,
+including money laundering or terrorist financing.
+3.3. You will not engage in any activity that is fraudulent, illegal, or otherwise
+prohibited by these Terms or any applicable law, regulation, or rule.
+3.4. Accuracy of Information: All information you provide to us is accurate,
+complete, and not misleading.
+3.5. You are responsible for any transaction fees, gas fees, or other costs
+associated with the purchase or usage of NFT licenses.
+3.6. All NFT-related transactions are executed via blockchain smart contracts and
+are final, immutable, and non-reversible.
+3.7. These apply to use of the COTI Node software in connection with validator
+access, license rights, and treasury operation. This is separate from the
+Apache 2.0 license which governs the source code only.
+3.8. You acknowledge that any metadata may be stored publicly on-chain.
+4. Prohibited Jurisdictions
+You are prohibited from accessing or using the Services if you are located,
+incorporated, or otherwise established in, or are a citizen or resident of:
+4.1. Countries or regions subject to comprehensive international sanctions,
+including but not limited to North Korea, Iran, Syria, Sudan, Crimea, and
+Cuba.
+4.2. Countries identified by the Financial Action Task Force (FATF) as high-risk or
+non-cooperative jurisdictions.
+4.3. Any other jurisdiction where the sale, purchase, or usage of the NFTs (and
+their functionality) is restricted or prohibited by law.
+5. Risk Disclosures
+5.1. The market for NFTs and digital assets is highly volatile and speculative. You
+acknowledge and accept that there is no guarantee of future value or
+liquidity.
+5.2. The legal status of NFTs and digital assets is uncertain and evolving.
+Changes in laws or regulations may adversely affect the use the NFTs, and
+you assume all risks associated with such changes.
+5.3. The Services rely on blockchain technology, which is subject to risks
+including, but not limited to, software bugs, hacking, and network disruptions.
+
+You acknowledge and accept the inherent risks associated with blockchain
+technology.
+5.4. The Company does not guarantee any returns, profits, or income from your
+NFT. Any potential for earning rewards is contingent upon your active
+participation and the performance of the COTI V2 network.
+5.5. The NFT does not confer any ownership, equity, revenue-sharing, voting
+rights, or any expectation of profits derived from the efforts of others. It solely
+grants access to operate a validator node on the COTI V2 network
+infrastructure and/or manage a corresponding Treasury smart contract.
+6. Wallet Integration and Security
+6.1. The Services are designed to integrate with non-custodial digital wallets,
+which means that you are solely responsible for managing and securing your
+private keys, passwords, and any other credentials related to your wallet.
+6.2. You agree to implement and maintain appropriate security measures to
+protect your wallet and associated digital assets.
+6.3. The Company is not liable for any loss or damage resulting from
+unauthorized access to your wallet, the NFTs, hacking, phishing, or other
+forms of cyberattacks. You assume full responsibility for any losses incurred
+due to security breaches.
+7. Intellectual Property
+7.1. All content, trademarks, logos, and intellectual property associated with the
+COTI V2 platform are the exclusive property of the Company or the COTI
+Foundation. You may not use, reproduce, or distribute any content from the
+platform without the Company&#39;s express written consent.
+7.2. By submitting any content to the Company, including feedback, comments,
+or suggestions, you grant the Company a perpetual, irrevocable, royalty-free,
+and worldwide license to use, reproduce, modify, and distribute such content
+in any manner.
+7.3. The Company is not responsible for the third-party websites or resources or
+content, or services provided by these third parties and does not endorse or
+assume any liability for their activities.
+8. Dispute Resolution
+8.1. Any disputes arising out of or relating to these Terms or the use of the
+platform will be resolved through binding arbitration in the British Virgin
+Islands (BVI), under the rules of the International Chamber of Commerce
+(ICC). The arbitration will be conducted in English, and the arbitrator&#39;s
+decision will be final and binding.
+
+8.2. By using or holding the NFT, you hereby agree to these Terms, and you
+waive your right to participate in any class action lawsuit or class-wide
+arbitration. All disputes must be resolved on an individual basis.
+8.3. The Company reserves the right to seek injunctive relief in any court of
+competent jurisdiction to protect its intellectual property rights or to prevent
+any breach of these Terms.
+9. Limitation of Liability
+9.1. The Services and all NFTs are provided on an &quot;as is&quot; and &quot;as available&quot;
+basis. The Company makes no warranties, express or implied, regarding the
+platform&#39;s functionality, availability, or the value of any NFT.
+9.2. To the fullest extent permitted by law, the Company disclaims any liability for
+any indirect, incidental, special, or consequential damages arising out of or in
+connection with your use of the platform or the purchase of NFT licenses,
+including but not limited to loss of profits, data, or business interruption.
+9.3. In no event will the Company&#39;s total liability to you for all claims arising out of
+or relating to these Terms exceed the total amount of $15.
+9.4. Nothing in these Terms shall be construed as financial advice, investment
+solicitation, or a guarantee of token value appreciation. The NFT is not a
+regulated product and is not offered for investment purposes. Users are
+solely responsible for determining whether participation in the COTI Network
+is appropriate given their objectives and risk tolerance.
+10. Node Dashboard
+10.1. The Company provides a dashboard interface to facilitate node
+management, license assignment, and NFT interactions. Use of the
+dashboard is subject to these Terms.
+10.2. By using the dashboard, you acknowledge that certain actions (including
+node minting and metadata updates) may result in permanent on-chain
+records.
+10.3. The Company does not guarantee uninterrupted dashboard access or
+compatibility with all devices.
+11. Amendments
+The Company reserves the right to amend these Terms at any time. Any changes
+will be effective immediately upon posting them.
+12. Governing Law
+These Terms and any disputes arising out of or in connection with them are
+governed by the laws of the British Virgin Islands (BVI), without regard to its conflict
+of law principles.
+
+13. Severability:
+If any provision of these Terms is found to be invalid, illegal, or unenforceable by a
+court of competent jurisdiction, the remaining provisions of these Terms will continue
+in full force and effect.
+14. Entire Terms
+These Terms, together with any other legal notices or agreements published by the
+Company, constitute the entire agreement between you and the Company regarding
+your use of the NFT licenses. It supersedes any prior agreements, communications,
+or understandings, whether written or oral, between you and the Company.
+15. Contact Information
+If you have any questions or concerns regarding these Terms, please contact us via
+the email address mentioned on the Company’s website.
