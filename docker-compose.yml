@@ -1,8 +1,8 @@
 services:
  # Sets up the genesis configuration for the go-ethereum client from a JSON file.
-  coti-full-node-genesis:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node-genesis
+  coti-testnet-full-node-genesis:
+    image: coti/testnet-full-node:1.1.4
+    container_name: coti-testnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
       - ./execution/:/execution
@@ -12,9 +12,9 @@ services:
         max-size: "10m"
         max-file: "1"
 
-  coti-full-node:
-    image: coti/full-node:1.1.3
-    container_name: coti-full-node
+  coti-testnet-full-node:
+    image: coti/testnet-full-node:1.1.4
+    container_name: coti-testnet-full-node
     command:
       - --soda.engine
       - --soda.seqaddr=0x7d9938777950631645B5B16057A2c52391a8e787
@@ -50,7 +50,7 @@ services:
       - 8546:8546
       - 7400:7400
     depends_on:
-      coti-full-node-genesis:
+      coti-testnet-full-node-genesis:
         condition: service_completed_successfully
     volumes:
       - ./execution/:/execution/
