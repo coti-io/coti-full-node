@@ -34,12 +34,12 @@ services:
       - --syncmode=full
       - --ws
       - --ws.port=8546
-      - --ws.addr=mainnet-fullnode
+      - --ws.addr=0.0.0.0
       - --ws.origins=*
       - --ws.api=web3,eth
       - --metrics
       - --metrics.expensive
-      - --metrics.addr=mainnet-fullnode
+      - --metrics.addr=0.0.0.0
       - --rpc.allow-unprotected-txs=true
       - --miner.gasprice=5000000
       - --bootnodes=enode://d6d9087c70eba1fd80a77dcda8a2441876e1a94fa83a3650eebeafc14df59d7e0a43cebf5f03705c119f6a91d78bceeab897fde757d8e5178eda987fb35f6d31@40.160.230.79:7400
@@ -49,7 +49,7 @@ services:
       - 8546:8546
       - 7400:7400
     depends_on:
-      mainnet-fullnode-genesis:
+      coti-mainnet-full-node-genesis:
         condition: service_completed_successfully
     volumes:
       - ./execution/:/execution/
