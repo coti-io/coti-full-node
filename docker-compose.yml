@@ -1,7 +1,7 @@
 services:
-  mainnet-fullnode-genesis:
-    image: coti/mainnet-full-node:1.1.3
-    container_name: mainnet-fullnode-genesis
+  coti-mainnet-full-node-genesis:
+    image: coti/mainnet-full-node:1.1.4
+    container_name: coti-mainnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
       - ./execution/:/execution
@@ -11,9 +11,9 @@ services:
         max-size: "10m"
         max-file: "1"
 
-  mainnet-fullnode:
-    image: coti/mainnet-full-node:1.1.3
-    container_name: mainnet-fullnode
+  coti-mainnet-full-node:
+    image: coti/mainnet-full-node:1.1.4
+    container_name: coti-mainnet-full-node
     command:
       - --soda.engine
       - --soda.seqaddr=0xB557a07a397B5c9C94FC44260dE6C8A45EF5e731
