@@ -20,7 +20,7 @@ To update your node to the latest version, follow these steps:
     * **Pull**: `cd ~/coti-full-node` and then `git pull`
 
 2.  **Checkout the Tag**: Ensure you are on the correct version by checking out the new tag.
-    `git checkout tags/v1.1.4-mainnet`
+    `git checkout tags/v1.1.4-testnet`
 
 3.  **Stop Old Containers**: Stop the existing containers by running the stop script.
     `./stop_coti-full-node.sh`
