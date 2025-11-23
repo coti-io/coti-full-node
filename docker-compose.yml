@@ -1,7 +1,7 @@
 services:
- # Sets up the genesis configuration for the go-ethereum client from a JSON file.
+  # Sets up the genesis configuration for the go-ethereum client from a JSON file.
   coti-testnet-full-node-genesis:
-    image: coti/testnet-full-node:1.2.0
+    image: coti/testnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
     container_name: coti-testnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
@@ -13,7 +13,7 @@ services:
         max-file: "1"
 
   coti-testnet-full-node:
-    image: coti/testnet-full-node:1.2.0
+    image: coti/testnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
     container_name: coti-testnet-full-node
     command:
       - --soda.engine
@@ -29,7 +29,7 @@ services:
       - --http.addr=0.0.0.0
       - --http.port=8545
       - --port=7400
-      - --identity=${FULLNODE_DNS_ADDRESS}
+      - --identity=${FULLNODE_FQDN}
       - --verbosity=3
       - --datadir=/execution
       - --syncmode=full
@@ -55,9 +55,37 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./execution/:/execution/
-      - ./execution/keystore:/execution/keystore
+      - ./nodekey:/execution/geth/nodekey
     logging:
       driver: "json-file"
       options:
         max-size: "50m"
         max-file: "5"
+
+  # Temporary Nginx for SSL setup only (Certbot ACME challenge). Use: docker-compose --profile setup up -d nginx-init
+  nginx-init:
+    image: nginx:1.15-alpine
+    container_name: nginx-init
+    profiles:
+      - setup
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/certbot:/var/www/certbot
+      - ./nginx/nginx-init_default.conf:/etc/nginx/conf.d/default.conf
+
+  nginx:
+    image: nginx:1.15-alpine
+    container_name: nginx
+    profiles:
+      - proxy-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/sites-enabled:/etc/nginx/sites-enabled
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/certbot:/var/www/certbot
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
