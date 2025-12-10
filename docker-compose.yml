@@ -1,6 +1,6 @@
 services:
   coti-mainnet-full-node-genesis:
-    image: coti/mainnet-full-node:1.1.4
+    image: coti/mainnet-full-node:1.2.0
     container_name: coti-mainnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
@@ -12,7 +12,7 @@ services:
         max-file: "1"
 
   coti-mainnet-full-node:
-    image: coti/mainnet-full-node:1.1.4
+    image: coti/mainnet-full-node:1.2.0
     container_name: coti-mainnet-full-node
     command:
       - --soda.engine
