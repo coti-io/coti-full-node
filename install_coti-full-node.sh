@@ -26,7 +26,7 @@ if [ -f "$INSTALLER_ENV_FILE" ]; then
 fi
 
 # Default values (can be overridden in installer.env)
-: "${DISK_SPACE_REQUIRED:=100}"      # GB
+: "${DISK_SPACE_REQUIRED:=90}"      # GB
 
 # present the requirements for the installer
 echo "====================================================="
