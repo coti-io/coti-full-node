@@ -32,3 +32,15 @@ To update your node to the latest version, follow these steps:
 ### Reporting Issues
 
 If you encounter any bugs or issues, please report them by [opening an issue](https://github.com/coti-io/coti-full-node/issues/new) on GitHub. Include as much detail as possible, including steps to reproduce the bug, the environment you encountered it in, and any other relevant information.
+
+### FRPC RPC Relay (Testnet Gateway)
+
+The stack can run an FRP client (`frpc`) container that creates an outbound-only tunnel from your node to `gateway.fullnode.testnet.coti.io:7000`.
+
+- FRPC is used only for JSON-RPC relay to the node RPC service on port `8545`.
+- P2P sync and peer connectivity still use the normal full-node bootnodes and port `7400`.
+- You do not need inbound RPC ports on your home PC for this relay mode.
+- Required outbound connectivity for relay is `gateway.fullnode.testnet.coti.io:7000`.
+- Gateway-side routing can forward external requests (for example `https://<node-id>.fullnode.testnet.coti.io/rpc`) through FRPS to your FRPC client, then to the local full-node RPC endpoint.
+
+Relevant environment variables are documented in `.env.example`.

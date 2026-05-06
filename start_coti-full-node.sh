@@ -18,18 +18,24 @@ else
     export FULLNODE_FQDN=$(dig -x $FULLNODE_EXT_IP +short | head -n 1)
 fi
 
+if [ "${FRPC_ENABLED:-false}" = "true" ]; then
+    FRPC_PROFILE_ARG="--profile frpc"
+else
+    FRPC_PROFILE_ARG=""
+fi
+
 echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}) is pulled..."
 if [[ "$1" == "--no-nginx" ]]; then
-    $DC pull
+    $DC $FRPC_PROFILE_ARG pull
 else
-    $DC --profile proxy-nginx pull
+    $DC --profile proxy-nginx $FRPC_PROFILE_ARG pull
 fi
 
 echo "Starting COTI full node services..."
 if [[ "$1" == "--no-nginx" ]]; then
-    $DC up -d
+    $DC $FRPC_PROFILE_ARG up -d
 else
-    $DC --profile proxy-nginx up -d
+    $DC --profile proxy-nginx $FRPC_PROFILE_ARG up -d
 fi
 
 echo "Node started. Checking liveness..."

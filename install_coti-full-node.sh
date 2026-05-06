@@ -44,6 +44,13 @@ read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
 : "${CLONE_BRANCH:=coti-testnet}"
 : "${NETWORK:=testnet}"
+: "${FRPC_ENABLED:=false}"
+: "${FRPS_SERVER_ADDR:=gateway.fullnode.testnet.coti.io}"
+: "${FRPS_SERVER_PORT:=7000}"
+: "${FRPC_PROXY_NAME:=}"
+: "${FRPC_CUSTOM_DOMAIN:=}"
+: "${FRPC_AUTH_TOKEN:=}"
+: "${COTI_FULL_NODE_RPC_LOCAL_PORT:=8545}"
 
 # --- ROOT CHECK ---
 if [ "$(id -u)" -ne 0 ]; then
@@ -68,6 +75,27 @@ done
 # Accept PK and FQDN as positional arguments
 PK="$1"
 FQDN="$2"
+
+# Optional FRPC overrides via environment variables or flags.
+for arg in "$@"; do
+    case "$arg" in
+        --frpc-enabled=*)
+            FRPC_ENABLED="${arg#*=}"
+            ;;
+        --frpc-custom-domain=*)
+            FRPC_CUSTOM_DOMAIN="${arg#*=}"
+            ;;
+        --frpc-auth-token=*)
+            FRPC_AUTH_TOKEN="${arg#*=}"
+            ;;
+        --frps-server-addr=*)
+            FRPS_SERVER_ADDR="${arg#*=}"
+            ;;
+        --frps-server-port=*)
+            FRPS_SERVER_PORT="${arg#*=}"
+            ;;
+    esac
+done
 
 echo "====================================================="
 echo "       COTI Full Node Automated Installer"
@@ -109,6 +137,30 @@ fi
 if [[ ! "$FQDN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || [ "${#FQDN}" -gt 253 ]; then
     echo "ERROR: FQDN must be a valid hostname (letters, numbers, hyphens, dots only; 1-253 chars)."
     echo "Example: node1.fullnode.testnet.coti.io"
+    exit 1
+fi
+
+# Validate FRPC settings.
+if [[ ! "$FRPC_ENABLED" =~ ^(true|false)$ ]]; then
+    echo "ERROR: FRPC_ENABLED must be 'true' or 'false'."
+    exit 1
+fi
+
+if [[ "$FRPC_ENABLED" == "true" ]] && [ -z "$FRPC_CUSTOM_DOMAIN" ]; then
+    FRPC_CUSTOM_DOMAIN="$FQDN"
+fi
+
+if [ -z "$FRPC_PROXY_NAME" ]; then
+    FRPC_PROXY_NAME="rpc-$FQDN"
+fi
+
+if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [ "$FRPS_SERVER_PORT" -gt 65535 ]; then
+    echo "ERROR: FRPS_SERVER_PORT must be a valid TCP port (1-65535)."
+    exit 1
+fi
+
+if [[ ! "$COTI_FULL_NODE_RPC_LOCAL_PORT" =~ ^[0-9]+$ ]] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -lt 1 ] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -gt 65535 ]; then
+    echo "ERROR: COTI_FULL_NODE_RPC_LOCAL_PORT must be a valid TCP port (1-65535)."
     exit 1
 fi
 
@@ -248,12 +300,42 @@ EXT_IP=$(curl -s https://api.ipify.org)
 cat <<EOF > .env
 FULLNODE_EXT_IP=$EXT_IP
 FULLNODE_FQDN=$FQDN
+FRPC_ENABLED=$FRPC_ENABLED
+FRPS_SERVER_ADDR=$FRPS_SERVER_ADDR
+FRPS_SERVER_PORT=$FRPS_SERVER_PORT
+FRPC_PROXY_NAME=$FRPC_PROXY_NAME
+FRPC_CUSTOM_DOMAIN=$FRPC_CUSTOM_DOMAIN
+FRPC_AUTH_TOKEN=$FRPC_AUTH_TOKEN
+COTI_FULL_NODE_RPC_LOCAL_PORT=$COTI_FULL_NODE_RPC_LOCAL_PORT
 EOF
 
 # --- 5. CONFIGURE PRIVATE KEY (NODEKEY) ---
 echo "--> Setting up identity and node keys..."
 # Ethereum/Geth based clients read the nodekey from a file
 echo -n "$PK_CLEAN" > ./nodekey
+
+# --- 5b. CONFIGURE FRPC (RPC RELAY ONLY) ---
+FRPC_AUTH_BLOCK=""
+if [ -n "$FRPC_AUTH_TOKEN" ]; then
+    FRPC_AUTH_BLOCK=$(cat <<EOF
+auth.method = "token"
+auth.token = "$FRPC_AUTH_TOKEN"
+EOF
+)
+fi
+
+cat <<EOF > ./frpc.toml
+serverAddr = "$FRPS_SERVER_ADDR"
+serverPort = $FRPS_SERVER_PORT
+$FRPC_AUTH_BLOCK
+
+[[proxies]]
+name = "$FRPC_PROXY_NAME"
+type = "http"
+localIP = "coti-testnet-full-node"
+localPort = $COTI_FULL_NODE_RPC_LOCAL_PORT
+customDomains = ["$FRPC_CUSTOM_DOMAIN"]
+EOF
 
 # --- 6-8. SSL AND NGINX SETUP (skipped with --no-nginx) ---
 if [[ "$NO_NGINX" != "true" ]]; then
@@ -353,6 +435,13 @@ if [[ "$NO_NGINX" == "true" ]]; then
     echo " Mode: node-only (no nginx/SSL). Access RPC/WS on ports 8545/8546."
 else
     echo " FQDN: https://$FQDN"
+fi
+if [[ "$FRPC_ENABLED" == "true" ]]; then
+    echo " FRPC RPC relay: enabled"
+    echo " FRPS gateway: $FRPS_SERVER_ADDR:$FRPS_SERVER_PORT"
+    echo " Public RPC domain: ${FRPC_CUSTOM_DOMAIN}"
+else
+    echo " FRPC RPC relay: disabled"
 fi
 echo " Use 'docker logs -f coti-$NETWORK-full-node' to view logs."
 echo "====================================================="

@@ -1,0 +1,9 @@
+serverAddr = "gateway.fullnode.testnet.coti.io"
+serverPort = 7000
+
+[[proxies]]
+name = "rpc-replace-me.fullnode.testnet.coti.io"
+type = "http"
+localIP = "coti-testnet-full-node"
+localPort = 8545
+customDomains = ["replace-me.fullnode.testnet.coti.io"]
