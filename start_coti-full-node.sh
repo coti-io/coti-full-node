@@ -24,10 +24,10 @@ else
     FRPC_PROFILE_ARG=""
 fi
 
-if [ "${NO_NGINX:-false}" = "true" ]; then
-    NGINX_PROFILE_ARG=""
-else
+if [ "${NGINX_ENABLED:-true}" = "true" ]; then
     NGINX_PROFILE_ARG="--profile proxy-nginx"
+else
+    NGINX_PROFILE_ARG=""
 fi
 
 echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}) is pulled..."
