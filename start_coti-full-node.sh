@@ -24,19 +24,17 @@ else
     FRPC_PROFILE_ARG=""
 fi
 
-echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}) is pulled..."
-if [[ "$1" == "--no-nginx" ]]; then
-    $DC $FRPC_PROFILE_ARG pull
+if [ "${NO_NGINX:-false}" = "true" ]; then
+    NGINX_PROFILE_ARG=""
 else
-    $DC --profile proxy-nginx $FRPC_PROFILE_ARG pull
+    NGINX_PROFILE_ARG="--profile proxy-nginx"
 fi
 
+echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}) is pulled..."
+$DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG pull
+
 echo "Starting COTI full node services..."
-if [[ "$1" == "--no-nginx" ]]; then
-    $DC $FRPC_PROFILE_ARG up -d
-else
-    $DC --profile proxy-nginx $FRPC_PROFILE_ARG up -d
-fi
+$DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG up -d
 
 echo "Node started. Checking liveness..."
 ./liveness_coti-full-node.sh
