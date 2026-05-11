@@ -1,9 +1,6 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status
 
-set -v
-set -x
-
 # present the steps of the installer
 echo "====================================================="
 echo "       COTI Full Node Automated Installer"
