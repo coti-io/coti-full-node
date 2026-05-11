@@ -1,5 +1,8 @@
 #!/bin/bash
 
+set -x
+set -v
+
 # Choose compose command: prefer "docker compose" (v2 plugin) when available
 if docker compose version >/dev/null 2>&1; then
     DC="docker compose"
