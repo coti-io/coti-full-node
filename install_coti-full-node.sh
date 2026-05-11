@@ -48,7 +48,6 @@ read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
 : "${FRPC_ENABLED:=false}"
 : "${FRPS_SERVER_ADDR:=gateway.fullnode.testnet.coti.io}"
 : "${FRPS_SERVER_PORT:=7000}"
-: "${FRPC_PROXY_NAME:=}"
 : "${FRPC_CUSTOM_DOMAIN:=}"
 : "${FRPC_AUTH_TOKEN:=}"
 : "${COTI_FULL_NODE_RPC_LOCAL_PORT:=8545}"
@@ -153,10 +152,6 @@ fi
 
 if [[ "$FRPC_ENABLED" == "true" ]] && [ -z "$FRPC_CUSTOM_DOMAIN" ]; then
     FRPC_CUSTOM_DOMAIN="$FQDN"
-fi
-
-if [ -z "$FRPC_PROXY_NAME" ]; then
-    FRPC_PROXY_NAME="rpc-$FQDN"
 fi
 
 if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [ "$FRPS_SERVER_PORT" -gt 65535 ]; then
@@ -309,7 +304,6 @@ NGINX_ENABLED=$NGINX_ENABLED
 FRPC_ENABLED=$FRPC_ENABLED
 FRPS_SERVER_ADDR=$FRPS_SERVER_ADDR
 FRPS_SERVER_PORT=$FRPS_SERVER_PORT
-FRPC_PROXY_NAME=$FRPC_PROXY_NAME
 FRPC_CUSTOM_DOMAIN=$FRPC_CUSTOM_DOMAIN
 FRPC_AUTH_TOKEN=$FRPC_AUTH_TOKEN
 COTI_FULL_NODE_RPC_LOCAL_PORT=$COTI_FULL_NODE_RPC_LOCAL_PORT
@@ -336,7 +330,7 @@ serverPort = $FRPS_SERVER_PORT
 $FRPC_AUTH_BLOCK
 
 [[proxies]]
-name = "$FRPC_PROXY_NAME"
+name = "$FRPC_CUSTOM_DOMAIN"
 type = "http"
 localIP = "coti-testnet-full-node"
 localPort = $COTI_FULL_NODE_RPC_LOCAL_PORT
