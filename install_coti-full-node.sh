@@ -34,10 +34,10 @@ echo "       Requirements for the installer"
 echo "====================================================="
 echo "1. OS: Ubuntu 24.04 LTS (Certified by COTI)"
 echo "2. Disk space: $DISK_SPACE_REQUIRED GB"
-echo "3. Ports 80 and 443 must be available for Nginx"
+echo "3. Ports 80 and 443 must be available for Nginx (if nginx is not used, skip this requirement)"
 echo "4. Port 7400 must be available"
-echo "5. Firewall must not be blocking ports 80, 443 and 7400"
-echo "6. Iptables must not be blocking port 7400"
+echo "5. Firewall must not be blocking ports 80, 443 and 7400 (if ufw is not used, skip this requirement)"
+echo "6. Iptables must not be blocking port 7400 (if iptables is not used, skip this requirement)"
 echo "====================================================="
 read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
 
@@ -61,17 +61,6 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-# Parse --no-nginx and --staging flags
-NO_NGINX=false
-CERTBOT_STAGING=false
-for arg in "$@"; do
-    if [[ "$arg" == "--no-nginx" ]]; then
-        NO_NGINX=true
-    elif [[ "$arg" == "--staging" ]]; then
-        CERTBOT_STAGING=true
-    fi
-done
-
 # Accept PK and FQDN as positional arguments
 PK="$1"
 FQDN="$2"
@@ -79,6 +68,12 @@ FQDN="$2"
 # Optional FRPC overrides via environment variables or flags.
 for arg in "$@"; do
     case "$arg" in
+        --no-nginx)
+            NO_NGINX=true
+            ;;
+        --staging)
+            CERTBOT_STAGING=true
+            ;;
         --frpc-enabled=*)
             FRPC_ENABLED="${arg#*=}"
             ;;
@@ -257,22 +252,22 @@ elif dpkg -s containerd.io >/dev/null 2>&1; then
     DOCKER_PRESENT=true
 fi
 
+# Detect necessary system dependencies
+PKGS="curl git jq dnsutils"
 if [[ "$DOCKER_PRESENT" == "true" ]]; then
     echo "--> Docker already present, skipping docker.io (avoid containerd.io conflict)"
-    if [[ "$NO_NGINX" == "true" ]]; then
-        apt-get install -y --no-install-recommends curl git jq dnsutils
-    else
-        apt-get install -y --no-install-recommends certbot curl git jq dnsutils
-    fi
 else
-    if [[ "$NO_NGINX" == "true" ]]; then
-        apt-get install -y docker.io docker-compose curl git jq dnsutils
-    else
-        apt-get install -y docker.io docker-compose certbot curl git jq dnsutils
-    fi
+    PKGS="docker.io docker-compose $PKGS"
 fi
 
-# Choose compose command: prefer "docker compose" (v2 plugin) when available
+if [[ "$NO_NGINX" != "true" ]]; then
+    PKGS="certbot $PKGS"
+fi
+
+# Install necessary system dependencies
+apt-get install -y --no-install-recommends $PKGS
+
+# Set the compose command
 if docker compose version >/dev/null 2>&1; then
     DC="docker compose"
 else
