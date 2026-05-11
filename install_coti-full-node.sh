@@ -11,7 +11,7 @@ echo "3. Install host dependencies"
 echo "4. Clone/prepare directory"
 echo "5. Generate .env file"
 echo "6. Configure private key (nodekey)"
-echo "7. SSL and Nginx setup (skipped with --no-nginx, use --staging for Let's Encrypt staging)"
+echo "7. SSL and Nginx setup (skipped when NGINX_ENABLED=false or with --no-nginx; use --staging for Let's Encrypt staging)"
 echo "8. Final launch"
 echo "====================================================="
 # Read from /dev/tty so prompts work when script is piped (curl | bash) - avoids consuming the script from stdin
@@ -44,6 +44,7 @@ read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
 : "${CLONE_BRANCH:=coti-testnet}"
 : "${NETWORK:=testnet}"
+: "${NGINX_ENABLED:=true}"
 : "${FRPC_ENABLED:=false}"
 : "${FRPS_SERVER_ADDR:=gateway.fullnode.testnet.coti.io}"
 : "${FRPS_SERVER_PORT:=7000}"
@@ -69,7 +70,10 @@ FQDN="$2"
 for arg in "$@"; do
     case "$arg" in
         --no-nginx)
-            NO_NGINX=true
+            NGINX_ENABLED=false
+            ;;
+        --nginx-enabled=*)
+            NGINX_ENABLED="${arg#*=}"
             ;;
         --staging)
             CERTBOT_STAGING=true
@@ -135,6 +139,12 @@ if [[ ! "$FQDN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || [ "${#FQDN}" 
     exit 1
 fi
 
+# Validate NGINX_ENABLED.
+if [[ ! "$NGINX_ENABLED" =~ ^(true|false)$ ]]; then
+    echo "ERROR: NGINX_ENABLED must be 'true' or 'false'."
+    exit 1
+fi
+
 # Validate FRPC settings.
 if [[ ! "$FRPC_ENABLED" =~ ^(true|false)$ ]]; then
     echo "ERROR: FRPC_ENABLED must be 'true' or 'false'."
@@ -181,7 +191,7 @@ if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
 fi
 
 # --- 1c. CHECK NGINX PORTS (80, 443) ARE AVAILABLE ---
-if [[ "$NO_NGINX" != "true" ]]; then
+if [[ "$NGINX_ENABLED" == "true" ]]; then
     NGINX_PORTS="80 443"
     for port in $NGINX_PORTS; do
         if ss -tlnp 2>/dev/null | grep -qE ":$port\s"; then
@@ -203,7 +213,7 @@ fi
 if command -v ufw >/dev/null 2>&1; then
     if ufw status | grep -qi "Status: active"; then
         # For nginx mode, ensure there are no DENY/REJECT rules on 80 or 443.
-        if [[ "$NO_NGINX" != "true" ]]; then
+        if [[ "$NGINX_ENABLED" == "true" ]]; then
             if ufw status | awk '$1 == "80/tcp"  && ($2 == "DENY" || $2 == "REJECT") {found=1} END {exit !found}'; then
                 echo "ERROR: Firewall (ufw) is blocking port 80. Please unblock it before running the installer."
                 exit 1
@@ -260,7 +270,7 @@ else
     PKGS="docker.io docker-compose $PKGS"
 fi
 
-if [[ "$NO_NGINX" != "true" ]]; then
+if [[ "$NGINX_ENABLED" == "true" ]]; then
     PKGS="certbot $PKGS"
 fi
 
@@ -295,6 +305,7 @@ EXT_IP=$(curl -s https://api.ipify.org)
 cat <<EOF > .env
 FULLNODE_EXT_IP=$EXT_IP
 FULLNODE_FQDN=$FQDN
+NGINX_ENABLED=$NGINX_ENABLED
 FRPC_ENABLED=$FRPC_ENABLED
 FRPS_SERVER_ADDR=$FRPS_SERVER_ADDR
 FRPS_SERVER_PORT=$FRPS_SERVER_PORT
@@ -332,8 +343,8 @@ localPort = $COTI_FULL_NODE_RPC_LOCAL_PORT
 customDomains = ["$FRPC_CUSTOM_DOMAIN"]
 EOF
 
-# --- 6-8. SSL AND NGINX SETUP (skipped with --no-nginx) ---
-if [[ "$NO_NGINX" != "true" ]]; then
+# --- 6-8. SSL AND NGINX SETUP (skipped when NGINX_ENABLED=false) ---
+if [[ "$NGINX_ENABLED" == "true" ]]; then
     echo "--> Preparing for Let's Encrypt challenge..."
     mkdir -p ./nginx/certbot ./nginx/sites-enabled
 
@@ -418,15 +429,11 @@ fi
 # --- 9. FINAL LAUNCH ---
 # Use start_coti-full-node.sh (sources .env, pulls images, starts services)
 echo "--> Starting up the full node stack..."
-if [[ "$NO_NGINX" == "true" ]]; then
-    ./start_coti-full-node.sh --no-nginx
-else
-    ./start_coti-full-node.sh
-fi
+./start_coti-full-node.sh
 
 echo "====================================================="
 echo " SUCCESS! Your COTI full node is initializing."
-if [[ "$NO_NGINX" == "true" ]]; then
+if [[ "$NGINX_ENABLED" != "true" ]]; then
     echo " Mode: node-only (no nginx/SSL). Access RPC/WS on ports 8545/8546."
 else
     echo " FQDN: https://$FQDN"
