@@ -1,0 +1,9 @@
+serverAddr = "virginia.fullnode.testnet.coti.io"
+serverPort = 7000
+
+[[proxies]]
+name = "replace-me.fullnode.testnet.coti.io"
+type = "http"
+localIP = "coti-testnet-full-node"
+localPort = 8545
+customDomains = ["replace-me.fullnode.testnet.coti.io"]

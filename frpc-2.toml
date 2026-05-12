@@ -1,4 +1,4 @@
-serverAddr = "gateway.fullnode.testnet.coti.io"
+serverAddr = "frankfurt.fullnode.testnet.coti.io"
 serverPort = 7000
 
 [[proxies]]
