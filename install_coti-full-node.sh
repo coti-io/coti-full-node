@@ -41,12 +41,19 @@ echo "6. Iptables must not be blocking port 7400 (if iptables is not used, skip 
 echo "====================================================="
 read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
 
+_FRPS_SERVER_ADDR_1_FROM_ENV=false
+_FRPS_SERVER_ADDR_2_FROM_ENV=false
+[[ -v FRPS_SERVER_ADDR_1 ]] && _FRPS_SERVER_ADDR_1_FROM_ENV=true
+[[ -v FRPS_SERVER_ADDR_2 ]] && _FRPS_SERVER_ADDR_2_FROM_ENV=true
+
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
 : "${CLONE_BRANCH:=coti-testnet}"
 : "${NETWORK:=testnet}"
 : "${NGINX_ENABLED:=true}"
 : "${FRPC_ENABLED:=false}"
-: "${FRPS_SERVER_ADDR:=gateway.fullnode.testnet.coti.io}"
+: "${FRPS_SERVER_ADDR:=}"
+: "${FRPS_SERVER_ADDR_1:=virginia.fullnode.testnet.coti.io}"
+: "${FRPS_SERVER_ADDR_2:=frankfurt.fullnode.testnet.coti.io}"
 : "${FRPS_SERVER_PORT:=7000}"
 : "${FRPC_CUSTOM_DOMAIN:=}"
 : "${FRPC_AUTH_TOKEN:=}"
@@ -64,6 +71,9 @@ fi
 # Accept PK and FQDN as positional arguments
 PK="$1"
 FQDN="$2"
+
+FRPS_SERVER_ADDR_1_EXPLICIT=false
+FRPS_SERVER_ADDR_2_EXPLICIT=false
 
 # Optional FRPC overrides via environment variables or flags.
 for arg in "$@"; do
@@ -89,11 +99,29 @@ for arg in "$@"; do
         --frps-server-addr=*)
             FRPS_SERVER_ADDR="${arg#*=}"
             ;;
+        --frps-server-addr-1=*)
+            FRPS_SERVER_ADDR_1="${arg#*=}"
+            FRPS_SERVER_ADDR_1_EXPLICIT=true
+            ;;
+        --frps-server-addr-2=*)
+            FRPS_SERVER_ADDR_2="${arg#*=}"
+            FRPS_SERVER_ADDR_2_EXPLICIT=true
+            ;;
         --frps-server-port=*)
             FRPS_SERVER_PORT="${arg#*=}"
             ;;
     esac
 done
+
+# Legacy single gateway: apply FRPS_SERVER_ADDR where a region host was not set (installer.env) or overridden (CLI).
+if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
+    if [[ "$FRPS_SERVER_ADDR_1_EXPLICIT" != "true" ]] && [[ "$_FRPS_SERVER_ADDR_1_FROM_ENV" != "true" ]]; then
+        FRPS_SERVER_ADDR_1="$FRPS_SERVER_ADDR"
+    fi
+    if [[ "$FRPS_SERVER_ADDR_2_EXPLICIT" != "true" ]] && [[ "$_FRPS_SERVER_ADDR_2_FROM_ENV" != "true" ]]; then
+        FRPS_SERVER_ADDR_2="$FRPS_SERVER_ADDR"
+    fi
+fi
 
 echo "====================================================="
 echo "       COTI Full Node Automated Installer"
@@ -303,6 +331,8 @@ FULLNODE_FQDN=$FQDN
 NGINX_ENABLED=$NGINX_ENABLED
 FRPC_ENABLED=$FRPC_ENABLED
 FRPS_SERVER_ADDR=$FRPS_SERVER_ADDR
+FRPS_SERVER_ADDR_1=$FRPS_SERVER_ADDR_1
+FRPS_SERVER_ADDR_2=$FRPS_SERVER_ADDR_2
 FRPS_SERVER_PORT=$FRPS_SERVER_PORT
 FRPC_CUSTOM_DOMAIN=$FRPC_CUSTOM_DOMAIN
 FRPC_AUTH_TOKEN=$FRPC_AUTH_TOKEN
@@ -324,8 +354,13 @@ EOF
 )
 fi
 
-cat <<EOF > ./frpc.toml
-serverAddr = "$FRPS_SERVER_ADDR"
+for _frpc_toml_pair in \
+    "frpc-1.toml:$FRPS_SERVER_ADDR_1" \
+    "frpc-2.toml:$FRPS_SERVER_ADDR_2"; do
+    _frpc_toml_file="${_frpc_toml_pair%%:*}"
+    _frpc_server_addr="${_frpc_toml_pair#*:}"
+    cat <<EOF > "./$_frpc_toml_file"
+serverAddr = "$_frpc_server_addr"
 serverPort = $FRPS_SERVER_PORT
 $FRPC_AUTH_BLOCK
 
@@ -336,6 +371,8 @@ localIP = "coti-testnet-full-node"
 localPort = $COTI_FULL_NODE_RPC_LOCAL_PORT
 customDomains = ["$FRPC_CUSTOM_DOMAIN"]
 EOF
+done
+unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
 
 # --- 6-8. SSL AND NGINX SETUP (skipped when NGINX_ENABLED=false) ---
 if [[ "$NGINX_ENABLED" == "true" ]]; then
@@ -434,7 +471,7 @@ else
 fi
 if [[ "$FRPC_ENABLED" == "true" ]]; then
     echo " FRPC RPC relay: enabled"
-    echo " FRPS gateway: $FRPS_SERVER_ADDR:$FRPS_SERVER_PORT"
+    echo " FRPS gateways: $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
     echo " Public RPC domain: ${FRPC_CUSTOM_DOMAIN}"
 else
     echo " FRPC RPC relay: disabled"

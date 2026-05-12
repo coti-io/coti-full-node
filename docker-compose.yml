@@ -62,9 +62,9 @@ services:
         max-size: "50m"
         max-file: "5"
 
-  frpc:
+  frpc-1:
     image: fatedier/frpc:v0.61.2
-    container_name: coti-testnet-frpc
+    container_name: coti-testnet-frpc-1
     restart: unless-stopped
     profiles:
       - frpc
@@ -74,7 +74,21 @@ services:
       - -c
       - /etc/frp/frpc.toml
     volumes:
-      - ./frpc.toml:/etc/frp/frpc.toml:ro
+      - ./frpc-1.toml:/etc/frp/frpc.toml:ro
+
+  frpc-2:
+    image: fatedier/frpc:v0.61.2
+    container_name: coti-testnet-frpc-2
+    restart: unless-stopped
+    profiles:
+      - frpc
+    depends_on:
+      - coti-testnet-full-node
+    command:
+      - -c
+      - /etc/frp/frpc.toml
+    volumes:
+      - ./frpc-2.toml:/etc/frp/frpc.toml:ro
 
   # Temporary Nginx for SSL setup only (Certbot ACME challenge). Use: docker-compose --profile setup up -d nginx-init
   nginx-init:
