@@ -1,6 +1,6 @@
 #!/bin/bash
 # Reset full node when node panics with "Head state missing" or database corruption.
-# Preserves nodekey and keystore. Requires full re-sync after running.
+# Preserves nodekey (host file). Drops chain data (Docker named volume) and requires full re-sync after running.
 
 set -e
 
@@ -23,8 +23,8 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-echo "WARNING: This will delete all node data. The node will need to re-sync from genesis."
-echo "Your nodekey and keystore will be preserved."
+echo "WARNING: This will delete all chain data (Docker volume). The node will need to re-sync from genesis."
+echo "Your ./nodekey file on this host is preserved."
 read -p "Continue? (y/N): " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
     echo "Aborted."
@@ -39,10 +39,8 @@ if [ -f .env ]; then
     set +a
 fi
 
-echo "--> Stopping containers..."
-$DC down 2>/dev/null || true
-
-echo "--> Removing geth directory (preserving nodekey as it is mapped to the container)..."
-rm -rf ./execution/geth/
+ALL_PROFILE_ARGS=(--profile frpc --profile proxy-nginx --profile setup)
+echo "--> Stopping containers and removing chain volume (nodekey on host is preserved)..."
+$DC "${ALL_PROFILE_ARGS[@]}" down -v 2>/dev/null || true
 
 echo "--> Done. Run ./start_coti-full-node.sh to re-init and re-sync."

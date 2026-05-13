@@ -52,6 +52,17 @@ print_requirements() {
 info() { printf '%s\n' "${_C}→${_R} $*"; }
 ok() { printf '%s\n' "${_G}✓${_R} $*"; }
 
+# Shown in help text (override if you mirror the installer elsewhere)
+FULLNODE_INSTALLER_URL="${FULLNODE_INSTALLER_URL:-https://fullnode.testnet.coti.io}"
+
+print_install_curl_examples() {
+    _w "Linux, macOS, or Windows WSL (Ubuntu 24.04):"
+    _w "  curl -sL ${FULLNODE_INSTALLER_URL} | sudo bash -s -- \"0x...\" \"your.domain\""
+    _w ""
+    _w "On WSL, run from a directory under your Linux home (e.g. ~/coti), not under /mnt/c/, so Docker can create Unix sockets for the node."
+    _w "Native Windows is not supported for this installer; use WSL (Ubuntu 24.04) or a Linux host."
+}
+
 print_welcome
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
 _w ""
@@ -98,8 +109,7 @@ fi
 if [ "$(id -u)" -ne 0 ]; then
     printf '%s\n' "${_Y}This script must be run as root.${_R}"
     _w ""
-    _w "Example:"
-    _w '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+    print_install_curl_examples
     exit 1
 fi
 
@@ -193,11 +203,9 @@ fi
 if [ -z "$FQDN" ] || [ -z "$PK" ]; then
     printf '%s\n' "${_Y}ERROR:${_R} Private key and FQDN are required."
     _w ""
-    _w "Example (node only — default):"
-    _w '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+    print_install_curl_examples
     _w ""
-    _w "With Nginx + Let's Encrypt:"
-    _w '  ... | sudo bash -s -- "0x..." "your.domain" --nginx'
+    _w "With Nginx + Let's Encrypt, append after the FQDN: --nginx"
     exit 1
 fi
 
