@@ -29,7 +29,7 @@ print_welcome() {
     _w "  3. Install host dependencies (Docker, tools)"
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
-    _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
+    _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--with-nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
     _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} = wizard tunnel: FRPC on, no Nginx; ${_U}--frpc${_R} = FRPC only)"
     _w "  8. Start the stack"
     _w ""
@@ -121,10 +121,10 @@ COTI_TUNNEL_INSTALL=false
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
-        --no-nginx)
+        --without-nginx)
             NGINX_ENABLED=false
             ;;
-        --nginx)
+        --with-nginx)
             NGINX_ENABLED=true
             COTI_TUNNEL_INSTALL=false
             ;;
@@ -142,7 +142,7 @@ for arg in "$@"; do
             NGINX_ENABLED=false
             COTI_TUNNEL_INSTALL=true
             ;;
-        --no-frpc)
+        --without-frp)
             FRPC_ENABLED=false
             COTI_TUNNEL_INSTALL=false
             ;;
@@ -222,7 +222,7 @@ if [ -z "$FQDN" ] || [ -z "$PK" ]; then
     _w ""
     print_install_curl_examples
     _w ""
-    _w "With Nginx + Let's Encrypt, append after the FQDN: --nginx"
+    _w "With Nginx + Let's Encrypt, append after the FQDN: --with-nginx"
     _w "Wizard tunnel (COTI subdomain + FRPC, no host TLS): --with-frp"
     exit 1
 fi
