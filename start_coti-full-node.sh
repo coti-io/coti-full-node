@@ -27,7 +27,7 @@ else
     FRPC_PROFILE_ARG=""
 fi
 
-if [ "${NGINX_ENABLED:-true}" = "true" ]; then
+if [ "${NGINX_ENABLED:-false}" = "true" ]; then
     NGINX_PROFILE_ARG="--profile proxy-nginx"
 else
     NGINX_PROFILE_ARG=""
