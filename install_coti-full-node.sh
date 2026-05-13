@@ -30,7 +30,7 @@ print_welcome() {
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
     _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
-    _w "  7. Optional: FRPC RPC relay (${_Y}off by default${_R}; use ${_U}--frpc${_R})"
+    _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} = wizard tunnel: FRPC on, no Nginx; ${_U}--frpc${_R} = FRPC only)"
     _w "  8. Start the stack"
     _w ""
     _div
@@ -42,9 +42,10 @@ print_requirements() {
     _div
     _w "  • OS: Ubuntu 24.04 LTS (supported by COTI)"
     _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
-    _w "  • Port 7400 available (node P2P)"
-    _w "  • With Nginx/SSL: ports 80 and 443 free; firewall allows 80/443/7400"
-    _w "  • Without Nginx: RPC/WS on local ports (see success message)"
+    _w "  • Port 7400 must be free locally for the node container (P2P)"
+    _w "  • ${_B}With Nginx/SSL:${_R} ports 80 and 443 free; firewall allows 80/443/7400"
+    _w "  • ${_B}With --with-frp${_R} (COTI wizard tunnel): no Nginx on host; inbound 80/443/7400 on the ${_U}firewall${_R} not required (FRP + edge TLS)"
+    _w "  • Without Nginx and without FRPC: RPC/WS on local ports (see success message)"
     _w ""
     _div
 }
@@ -116,6 +117,7 @@ fi
 # Split flags from positional arguments (flags may appear before or after PK/FQDN)
 FRPS_SERVER_ADDR_1_EXPLICIT=false
 FRPS_SERVER_ADDR_2_EXPLICIT=false
+COTI_TUNNEL_INSTALL=false
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
@@ -124,21 +126,31 @@ for arg in "$@"; do
             ;;
         --nginx)
             NGINX_ENABLED=true
+            COTI_TUNNEL_INSTALL=false
             ;;
         --nginx-enabled=*)
             NGINX_ENABLED="${arg#*=}"
+            if [[ "$NGINX_ENABLED" == "true" ]]; then
+                COTI_TUNNEL_INSTALL=false
+            fi
             ;;
         --staging)
             CERTBOT_STAGING=true
             ;;
-        --frpc)
+        --with-frp)
             FRPC_ENABLED=true
+            NGINX_ENABLED=false
+            COTI_TUNNEL_INSTALL=true
             ;;
         --no-frpc)
             FRPC_ENABLED=false
+            COTI_TUNNEL_INSTALL=false
             ;;
         --frpc-enabled=*)
             FRPC_ENABLED="${arg#*=}"
+            if [[ "$FRPC_ENABLED" != "true" ]]; then
+                COTI_TUNNEL_INSTALL=false
+            fi
             ;;
         --frpc-custom-domain=*)
             FRPC_CUSTOM_DOMAIN="${arg#*=}"
@@ -168,6 +180,11 @@ done
 
 PK="${POSITIONAL[0]:-}"
 FQDN="${POSITIONAL[1]:-}"
+
+if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" != "true" ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} COTI tunnel install requires FRPC (--with-frp implies --frpc)."
+    exit 1
+fi
 
 # Legacy single gateway: apply FRPS_SERVER_ADDR where a region host was not set (installer.env) or overridden (CLI).
 if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
@@ -206,6 +223,7 @@ if [ -z "$FQDN" ] || [ -z "$PK" ]; then
     print_install_curl_examples
     _w ""
     _w "With Nginx + Let's Encrypt, append after the FQDN: --nginx"
+    _w "Wizard tunnel (COTI subdomain + FRPC, no host TLS): --with-frp"
     exit 1
 fi
 
@@ -252,7 +270,7 @@ if [[ ! "$COTI_FULL_NODE_RPC_LOCAL_PORT" =~ ^[0-9]+$ ]] || [ "$COTI_FULL_NODE_RP
     exit 1
 fi
 
-info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}"
+info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}$([[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && printf ' · %s' "${_B}COTI tunnel (wizard)${_R}")"
 _w ""
 
 # --- 1b. CHECK INSTALL DIRECTORY (writability + disk space) ---
@@ -293,6 +311,8 @@ if ss -tlnp 2>/dev/null | grep -qE "7400\s"; then
 fi
 
 # --- 1d/1f. CHECK FIREWALL/ IPTABLES RULES FOR REQUIRED PORTS ---
+# COTI tunnel (--with-frp): public RPC/HTTPS and much of P2P reachability go via FRP; skip inbound FW checks.
+if [[ "${COTI_TUNNEL_INSTALL:-false}" != "true" ]]; then
 # Only perform ufw checks if ufw is installed and active.
 if command -v ufw >/dev/null 2>&1; then
     if ufw status | grep -qi "Status: active"; then
@@ -328,6 +348,7 @@ if command -v iptables >/dev/null 2>&1; then
         printf '%s\n' "${_Y}ERROR:${_R} iptables appears to block port 7400."
         exit 1
     fi
+fi
 fi
 
 # --- 2. INSTALL HOST DEPENDENCIES ---
@@ -527,16 +548,23 @@ _div
 ok "COTI full node is starting."
 _w ""
 if [[ "$NGINX_ENABLED" != "true" ]]; then
-    _w "  • Mode: ${_B}node only${_R} (no Nginx/SSL in Docker)"
-    _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
+    _w "  • Mode: ${_B}no Nginx/SSL on this host${_R}"
+    if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" == "true" ]]; then
+        _w "  • COTI tunnel: public HTTPS/RPC at ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}${_R} (edge TLS + DNS by COTI; FRPC to this node)"
+    else
+        _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
+    fi
 else
     _w "  • HTTPS: ${_B}https://$FQDN${_R}"
 fi
 if [[ "$FRPC_ENABLED" == "true" ]]; then
     _w "  • FRPC: ${_B}enabled${_R} — gateways $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
-    _w "  • Public RPC host: ${FRPC_CUSTOM_DOMAIN}"
+    _w "  • FRPC custom domain (proxy name): ${FRPC_CUSTOM_DOMAIN}"
+    if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]]; then
+        _w "  • Inbound firewall: ${_B}not required${_R} for 80/443/7400 from the internet (outbound FRP + local P2P)"
+    fi
 else
-    _w "  • FRPC: ${_D}disabled${_R} (enable with --frpc)"
+    _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; or ${_U}--frpc${_R})"
 fi
 _w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
 _div
