@@ -47,11 +47,10 @@ if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
     exit 1
 fi
 
-# Stop and remove containers
+# Stop and remove containers (all profiles) and named volumes (e.g. chain data)
 if [ -f "$DIR/docker-compose.yml" ]; then
-    echo "--> Stopping Docker containers..."
-    (cd "$DIR" && $DC --profile setup down 2>/dev/null || true)
-    (cd "$DIR" && $DC down 2>/dev/null || true)
+    echo "--> Stopping Docker containers and project volumes..."
+    (cd "$DIR" && $DC --profile frpc --profile proxy-nginx --profile setup down -v 2>/dev/null || true)
 fi
 
 # Remove cloned repo
@@ -68,5 +67,6 @@ fi
 
 echo ""
 echo "Done. Run install_coti-full-node.sh again to test from scratch."
-echo "Example:"
+echo "Example (Linux / macOS / Windows WSL on Ubuntu 24.04):"
 echo '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+echo "On WSL, install from ~/... not /mnt/c/... (Docker + Geth IPC need a Linux filesystem path)."
