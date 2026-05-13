@@ -15,4 +15,6 @@ if [ -f .env ]; then
     set +a
 fi
 
-sudo $DC down
+# Enable every compose profile so `down` stops optional stacks too (frpc, nginx, nginx-init/setup).
+ALL_PROFILE_ARGS=(--profile frpc --profile proxy-nginx --profile setup)
+$DC "${ALL_PROFILE_ARGS[@]}" down
