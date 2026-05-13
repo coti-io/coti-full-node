@@ -30,7 +30,7 @@ print_welcome() {
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
     _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
-    _w "  7. Optional: FRPC RPC relay (${_Y}off by default${_R}; use ${_U}--frpc-enabled=true${_R})"
+    _w "  7. Optional: FRPC RPC relay (${_Y}off by default${_R}; use ${_U}--frpc${_R})"
     _w "  8. Start the stack"
     _w ""
     _div
@@ -120,6 +120,12 @@ for arg in "$@"; do
             ;;
         --staging)
             CERTBOT_STAGING=true
+            ;;
+        --frpc)
+            FRPC_ENABLED=true
+            ;;
+        --no-frpc)
+            FRPC_ENABLED=false
             ;;
         --frpc-enabled=*)
             FRPC_ENABLED="${arg#*=}"
@@ -522,7 +528,7 @@ if [[ "$FRPC_ENABLED" == "true" ]]; then
     _w "  • FRPC: ${_B}enabled${_R} — gateways $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
     _w "  • Public RPC host: ${FRPC_CUSTOM_DOMAIN}"
 else
-    _w "  • FRPC: ${_D}disabled${_R} (enable with --frpc-enabled=true)"
+    _w "  • FRPC: ${_D}disabled${_R} (enable with --frpc)"
 fi
 _w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
 _div
