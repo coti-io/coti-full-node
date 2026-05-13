@@ -1,21 +1,60 @@
 #!/bin/bash
 set -e # Exit immediately if a command exits with a non-zero status
 
-# present the steps of the installer
-echo "====================================================="
-echo "       COTI Full Node Automated Installer"
-echo "====================================================="
-echo "1. OS validation"
-echo "2. Validate required inputs (PK, FQDN as args)"
-echo "3. Install host dependencies"
-echo "4. Clone/prepare directory"
-echo "5. Generate .env file"
-echo "6. Configure private key (nodekey)"
-echo "7. SSL and Nginx setup (skipped when NGINX_ENABLED=false or with --no-nginx; use --staging for Let's Encrypt staging)"
-echo "8. Final launch"
-echo "====================================================="
-# Read from /dev/tty so prompts work when script is piped (curl | bash) - avoids consuming the script from stdin
-read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
+# --- Terminal styling (no-op when stdout is not a TTY) ---
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    _B=$(tput bold 2>/dev/null || true)
+    _D=$(tput dim 2>/dev/null || true)
+    _U=$(tput smul 2>/dev/null || true)
+    _R=$(tput sgr0 2>/dev/null || true)
+    _C=$(tput setaf 6 2>/dev/null || true)
+    _G=$(tput setaf 2 2>/dev/null || true)
+    _Y=$(tput setaf 3 2>/dev/null || true)
+else
+    _B="" _D="" _U="" _R="" _C="" _G="" _Y=""
+fi
+
+_w() { printf '%s\n' "$*"; }
+_banner_line() { printf '%s\n' "${_C}${_B}$*${_R}"; }
+_div() { printf '%s\n' "${_D}────────────────────────────────────────────────────${_R}"; }
+
+print_welcome() {
+    _div
+    _banner_line "  COTI Full Node — automated installer"
+    _div
+    _w ""
+    _w "${_B}Planned steps${_R}"
+    _w "  1. OS validation"
+    _w "  2. Validate inputs (private key, FQDN)"
+    _w "  3. Install host dependencies (Docker, tools)"
+    _w "  4. Clone repository and prepare directory"
+    _w "  5. Generate .env and node identity"
+    _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
+    _w "  7. Optional: FRPC RPC relay (${_Y}off by default${_R}; use ${_U}--frpc-enabled=true${_R})"
+    _w "  8. Start the stack"
+    _w ""
+    _div
+}
+
+print_requirements() {
+    _div
+    _banner_line "  Requirements"
+    _div
+    _w "  • OS: Ubuntu 24.04 LTS (supported by COTI)"
+    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
+    _w "  • Port 7400 available (node P2P)"
+    _w "  • With Nginx/SSL: ports 80 and 443 free; firewall allows 80/443/7400"
+    _w "  • Without Nginx: RPC/WS on local ports (see success message)"
+    _w ""
+    _div
+}
+
+info() { printf '%s\n' "${_C}→${_R} $*"; }
+ok() { printf '%s\n' "${_G}✓${_R} $*"; }
+
+print_welcome
+read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
+_w ""
 
 # Load installer configuration (if present) so key constants can be customized without editing this script.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
@@ -28,28 +67,24 @@ fi
 # Default values (can be overridden in installer.env)
 : "${DISK_SPACE_REQUIRED:=90}"      # GB
 
-# present the requirements for the installer
-echo "====================================================="
-echo "       Requirements for the installer"
-echo "====================================================="
-echo "1. OS: Ubuntu 24.04 LTS (Certified by COTI)"
-echo "2. Disk space: $DISK_SPACE_REQUIRED GB"
-echo "3. Ports 80 and 443 must be available for Nginx (if nginx is not used, skip this requirement)"
-echo "4. Port 7400 must be available"
-echo "5. Firewall must not be blocking ports 80, 443 and 7400 (if ufw is not used, skip this requirement)"
-echo "6. Iptables must not be blocking port 7400 (if iptables is not used, skip this requirement)"
-echo "====================================================="
-read -p "Press Enter to continue or Ctrl+C to abort" < /dev/tty
+print_requirements
+read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
+_w ""
 
 _FRPS_SERVER_ADDR_1_FROM_ENV=false
 _FRPS_SERVER_ADDR_2_FROM_ENV=false
-[[ -v FRPS_SERVER_ADDR_1 ]] && _FRPS_SERVER_ADDR_1_FROM_ENV=true
-[[ -v FRPS_SERVER_ADDR_2 ]] && _FRPS_SERVER_ADDR_2_FROM_ENV=true
+# After sourcing installer.env: detect FRPS host vars before := defaults (matches empty assignment)
+if declare -p FRPS_SERVER_ADDR_1 >/dev/null 2>&1; then
+    _FRPS_SERVER_ADDR_1_FROM_ENV=true
+fi
+if declare -p FRPS_SERVER_ADDR_2 >/dev/null 2>&1; then
+    _FRPS_SERVER_ADDR_2_FROM_ENV=true
+fi
 
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
 : "${CLONE_BRANCH:=coti-testnet}"
 : "${NETWORK:=testnet}"
-: "${NGINX_ENABLED:=true}"
+: "${NGINX_ENABLED:=false}"
 : "${FRPC_ENABLED:=false}"
 : "${FRPS_SERVER_ADDR:=}"
 : "${FRPS_SERVER_ADDR_1:=virginia.fullnode.testnet.coti.io}"
@@ -61,25 +96,24 @@ _FRPS_SERVER_ADDR_2_FROM_ENV=false
 
 # --- ROOT CHECK ---
 if [ "$(id -u)" -ne 0 ]; then
-    echo "This script must be run as root."
-    echo
-    echo "Example:"
-    echo '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+    printf '%s\n' "${_Y}This script must be run as root.${_R}"
+    _w ""
+    _w "Example:"
+    _w '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
     exit 1
 fi
 
-# Accept PK and FQDN as positional arguments
-PK="$1"
-FQDN="$2"
-
+# Split flags from positional arguments (flags may appear before or after PK/FQDN)
 FRPS_SERVER_ADDR_1_EXPLICIT=false
 FRPS_SERVER_ADDR_2_EXPLICIT=false
-
-# Optional FRPC overrides via environment variables or flags.
+POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
         --no-nginx)
             NGINX_ENABLED=false
+            ;;
+        --nginx)
+            NGINX_ENABLED=true
             ;;
         --nginx-enabled=*)
             NGINX_ENABLED="${arg#*=}"
@@ -110,8 +144,14 @@ for arg in "$@"; do
         --frps-server-port=*)
             FRPS_SERVER_PORT="${arg#*=}"
             ;;
+        *)
+            POSITIONAL+=("$arg")
+            ;;
     esac
 done
+
+PK="${POSITIONAL[0]:-}"
+FQDN="${POSITIONAL[1]:-}"
 
 # Legacy single gateway: apply FRPS_SERVER_ADDR where a region host was not set (installer.env) or overridden (CLI).
 if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
@@ -123,19 +163,21 @@ if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
     fi
 fi
 
-echo "====================================================="
-echo "       COTI Full Node Automated Installer"
-echo "====================================================="
+_div
+_banner_line "  Installing COTI Full Node"
+_div
+_w ""
 
 # --- 0. OS VALIDATION ---
 if [ -f /etc/os-release ]; then
+    # shellcheck source=/dev/null
     . /etc/os-release
     if [[ "$ID" != "ubuntu" ]] || [[ ! "$VERSION_ID" =~ ^24\.04 ]]; then
-        echo "WARNING: This script only supports Ubuntu 24.04 LTS."
-        echo "Detected: $PRETTY_NAME"
-        read -p "Proceed at your own risk? (y/N): " PROCEED < /dev/tty
+        printf '%s\n' "${_Y}Warning:${_R} This script targets Ubuntu 24.04 LTS."
+        printf '%s\n' "Detected: $PRETTY_NAME"
+        read -r -p "Proceed anyway? (y/N): " PROCEED < /dev/tty
         if [[ ! "$PROCEED" =~ ^[yY] ]]; then
-            echo "Aborted."
+            _w "Aborted."
             exit 1
         fi
     fi
@@ -143,9 +185,13 @@ fi
 
 # --- 1. VALIDATE REQUIRED INPUTS (PK, FQDN as args) ---
 if [ -z "$FQDN" ] || [ -z "$PK" ]; then
-    echo "ERROR: PK and FQDN must be passed as arguments."
-    echo "Example:"
-    echo '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+    printf '%s\n' "${_Y}ERROR:${_R} Private key and FQDN are required."
+    _w ""
+    _w "Example (node only — default):"
+    _w '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+    _w ""
+    _w "With Nginx + Let's Encrypt:"
+    _w '  ... | sudo bash -s -- "0x..." "your.domain" --nginx'
     exit 1
 fi
 
@@ -154,27 +200,27 @@ PK_CLEAN="${PK#0x}"
 
 # Validate PK: must be exactly 64 hexadecimal characters (32 bytes)
 if [[ ! "$PK_CLEAN" =~ ^[0-9a-fA-F]{64}$ ]]; then
-    echo "ERROR: PK must be a 64-character hex string (32 bytes). Example: 0x1234...abcd"
-    echo "Got ${#PK_CLEAN} characters."
+    printf '%s\n' "${_Y}ERROR:${_R} Private key must be 64 hex characters (32 bytes), with optional 0x prefix."
+    printf '%s\n' "Got ${#PK_CLEAN} hex characters after stripping 0x."
     exit 1
 fi
 
 # Validate FQDN: hostname only (alphanumeric, hyphens, dots); prevents injection
 if [[ ! "$FQDN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || [ "${#FQDN}" -gt 253 ]; then
-    echo "ERROR: FQDN must be a valid hostname (letters, numbers, hyphens, dots only; 1-253 chars)."
-    echo "Example: node1.fullnode.testnet.coti.io"
+    printf '%s\n' "${_Y}ERROR:${_R} FQDN must be a valid hostname (letters, numbers, hyphens, dots; 1–253 chars)."
+    _w "Example: node1.fullnode.testnet.coti.io"
     exit 1
 fi
 
 # Validate NGINX_ENABLED.
 if [[ ! "$NGINX_ENABLED" =~ ^(true|false)$ ]]; then
-    echo "ERROR: NGINX_ENABLED must be 'true' or 'false'."
+    printf '%s\n' "${_Y}ERROR:${_R} NGINX_ENABLED must be 'true' or 'false'."
     exit 1
 fi
 
 # Validate FRPC settings.
 if [[ ! "$FRPC_ENABLED" =~ ^(true|false)$ ]]; then
-    echo "ERROR: FRPC_ENABLED must be 'true' or 'false'."
+    printf '%s\n' "${_Y}ERROR:${_R} FRPC_ENABLED must be 'true' or 'false'."
     exit 1
 fi
 
@@ -183,20 +229,23 @@ if [[ "$FRPC_ENABLED" == "true" ]] && [ -z "$FRPC_CUSTOM_DOMAIN" ]; then
 fi
 
 if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [ "$FRPS_SERVER_PORT" -gt 65535 ]; then
-    echo "ERROR: FRPS_SERVER_PORT must be a valid TCP port (1-65535)."
+    printf '%s\n' "${_Y}ERROR:${_R} FRPS_SERVER_PORT must be a valid TCP port (1–65535)."
     exit 1
 fi
 
 if [[ ! "$COTI_FULL_NODE_RPC_LOCAL_PORT" =~ ^[0-9]+$ ]] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -lt 1 ] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -gt 65535 ]; then
-    echo "ERROR: COTI_FULL_NODE_RPC_LOCAL_PORT must be a valid TCP port (1-65535)."
+    printf '%s\n' "${_Y}ERROR:${_R} COTI_FULL_NODE_RPC_LOCAL_PORT must be a valid TCP port (1–65535)."
     exit 1
 fi
+
+info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}"
+_w ""
 
 # --- 1b. CHECK INSTALL DIRECTORY (writability + disk space) ---
 INSTALL_DIR="$(pwd)"
 if [ ! -w "$INSTALL_DIR" ]; then
-    echo "ERROR: Cannot write to current directory ($INSTALL_DIR)."
-    echo "Please run the installer from a writable directory (e.g. cd ~ or cd /mnt)."
+    printf '%s\n' "${_Y}ERROR:${_R} Cannot write to current directory ($INSTALL_DIR)."
+    _w "Run the installer from a writable directory (for example cd ~)."
     exit 1
 fi
 
@@ -205,11 +254,10 @@ AVAIL_KB=$(df -P "$INSTALL_DIR" | awk 'NR==2 {print $4}')
 if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
     if [ -n "$AVAIL_KB" ]; then
         AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
-        echo "ERROR: Insufficient disk space. $INSTALL_DIR is on a partition with only ${AVAIL_GB} GB free. Required: ${DISK_SPACE_REQUIRED} GB."
+        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free in $INSTALL_DIR (about ${AVAIL_GB} GB available)."
     else
-        echo "ERROR: Unable to determine disk space for $INSTALL_DIR."
+        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for $INSTALL_DIR."
     fi
-    echo "Please run the installer from a partition with enough space (e.g. cd /mnt)."
     exit 1
 fi
 
@@ -218,8 +266,7 @@ if [[ "$NGINX_ENABLED" == "true" ]]; then
     NGINX_PORTS="80 443"
     for port in $NGINX_PORTS; do
         if ss -tlnp 2>/dev/null | grep -qE ":$port\s"; then
-            echo "ERROR: Port $port is already in use. Nginx requires ports 80 and 443 to be available."
-            echo "Free the port or stop the conflicting service before running the installer."
+            printf '%s\n' "${_Y}ERROR:${_R} Port $port is in use. Nginx needs 80 and 443 free."
             exit 1
         fi
     done
@@ -227,7 +274,7 @@ fi
 
 # --- 1e. CHECK PORT 7400 IS AVAILABLE ---
 if ss -tlnp 2>/dev/null | grep -qE "7400\s"; then
-    echo "ERROR: Port 7400 is already in use. Please free the port before running the installer."
+    printf '%s\n' "${_Y}ERROR:${_R} Port 7400 is already in use."
     exit 1
 fi
 
@@ -238,22 +285,22 @@ if command -v ufw >/dev/null 2>&1; then
         # For nginx mode, ensure there are no DENY/REJECT rules on 80 or 443.
         if [[ "$NGINX_ENABLED" == "true" ]]; then
             if ufw status | awk '$1 == "80/tcp"  && ($2 == "DENY" || $2 == "REJECT") {found=1} END {exit !found}'; then
-                echo "ERROR: Firewall (ufw) is blocking port 80. Please unblock it before running the installer."
+                printf '%s\n' "${_Y}ERROR:${_R} ufw is blocking port 80."
                 exit 1
             fi
             if ufw status | awk '$1 == "443/tcp" && ($2 == "DENY" || $2 == "REJECT") {found=1} END {exit !found}'; then
-                echo "ERROR: Firewall (ufw) is blocking port 443. Please unblock it before running the installer."
+                printf '%s\n' "${_Y}ERROR:${_R} ufw is blocking port 443."
                 exit 1
             fi
         fi
 
         # For the node’s UDP/TCP port 7400, also ensure no DENY/REJECT rules.
         if ufw status | awk '$1 == "7400/udp" && ($2 == "DENY" || $2 == "REJECT") {found=1} END {exit !found}'; then
-            echo "ERROR: Firewall (ufw) is blocking port 7400/udp. Please unblock it before running the installer."
+            printf '%s\n' "${_Y}ERROR:${_R} ufw is blocking 7400/udp."
             exit 1
         fi
         if ufw status | awk '$1 == "7400/tcp" && ($2 == "DENY" || $2 == "REJECT") {found=1} END {exit !found}'; then
-            echo "ERROR: Firewall (ufw) is blocking port 7400/tcp. Please unblock it before running the installer."
+            printf '%s\n' "${_Y}ERROR:${_R} ufw is blocking 7400/tcp."
             exit 1
         fi
     fi
@@ -264,13 +311,13 @@ fi
 # exit !found: when blocking found, exit 0 so we run the error block; when not found, exit 1 so we continue
 if command -v iptables >/dev/null 2>&1; then
     if iptables -L -n 2>/dev/null | awk '/dpt:7400/ && ($1 == "DROP" || $1 == "REJECT") {found=1} END {exit !found}'; then
-        echo "ERROR: iptables appears to be blocking port 7400. Please unblock it before running the installer."
+        printf '%s\n' "${_Y}ERROR:${_R} iptables appears to block port 7400."
         exit 1
     fi
 fi
 
 # --- 2. INSTALL HOST DEPENDENCIES ---
-echo "--> Installing necessary system dependencies (Docker, Certbot)..."
+info "Installing system packages..."
 # Ensure package index is up to date before installing dependencies.
 apt-get update -y
 
@@ -288,7 +335,7 @@ fi
 # Detect necessary system dependencies
 PKGS="curl git jq dnsutils"
 if [[ "$DOCKER_PRESENT" == "true" ]]; then
-    echo "--> Docker already present, skipping docker.io (avoid containerd.io conflict)"
+    info "Docker already present — skipping docker.io (avoids containerd.io conflict)"
 else
     PKGS="docker.io docker-compose $PKGS"
 fi
@@ -310,19 +357,19 @@ fi
 # --- 3. CLONE/PREPARE DIRECTORY ---
 # Require a clean directory: no existing clone (avoids old-version conflicts).
 if [ -f "docker-compose.yml" ] || [ -d "coti-full-node" ]; then
-    echo "ERROR: Current directory is not clean for a fresh install."
-    echo "  - Found docker-compose.yml: you may be inside an existing clone."
-    echo "  - Found coti-full-node/: a clone already exists here."
-    echo "Please run the installer from an empty directory."
+    printf '%s\n' "${_Y}ERROR:${_R} Current directory is not clean for a fresh install."
+    _w "  • docker-compose.yml present, or"
+    _w "  • coti-full-node/ already exists"
+    _w "Use an empty directory and run again."
     exit 1
 fi
 
-echo "--> Cloning COTI full-node repository..."
-git clone -b $CLONE_BRANCH https://github.com/coti-io/coti-full-node.git
+info "Cloning coti-full-node (${CLONE_BRANCH})..."
+git clone -b "$CLONE_BRANCH" https://github.com/coti-io/coti-full-node.git
 cd coti-full-node
 
 # --- 4. GENERATE .ENV FILE ---
-echo "--> Generating environment variables..."
+info "Writing .env..."
 EXT_IP=$(curl -s https://api.ipify.org)
 
 cat <<EOF > .env
@@ -340,7 +387,7 @@ COTI_FULL_NODE_RPC_LOCAL_PORT=$COTI_FULL_NODE_RPC_LOCAL_PORT
 EOF
 
 # --- 5. CONFIGURE PRIVATE KEY (NODEKEY) ---
-echo "--> Setting up identity and node keys..."
+info "Writing node key..."
 # Ethereum/Geth based clients read the nodekey from a file
 echo -n "$PK_CLEAN" > ./nodekey
 
@@ -376,29 +423,29 @@ unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
 
 # --- 6-8. SSL AND NGINX SETUP (skipped when NGINX_ENABLED=false) ---
 if [[ "$NGINX_ENABLED" == "true" ]]; then
-    echo "--> Preparing for Let's Encrypt challenge..."
+    info "Preparing Let's Encrypt HTTP-01 challenge..."
     mkdir -p ./nginx/certbot ./nginx/sites-enabled
 
     # Start temporary nginx-init (profile: setup) - serves only port 80 for ACME challenge
-    echo "--> Starting temporary Nginx to verify domain..."
+    info "Starting temporary Nginx for ACME..."
     $DC --profile setup up -d nginx-init
 
     # --- 7. RUN CERTBOT ---
     CERTBOT_EXTRA=""
     if [[ "$CERTBOT_STAGING" == "true" ]]; then
-        echo "--> Requesting SSL Certificate for $FQDN (Let's Encrypt STAGING - not trusted by browsers)..."
+        info "Requesting certificate for $FQDN (${_Y}Let's Encrypt staging${_R} — not browser-trusted)..."
         CERTBOT_EXTRA="--staging"
     else
-        echo "--> Requesting SSL Certificate for $FQDN..."
+        info "Requesting certificate for $FQDN..."
     fi
     certbot certonly --webroot -w "$(pwd)/nginx/certbot" -d "$FQDN" $CERTBOT_EXTRA --register-unsafely-without-email --agree-tos --non-interactive
 
     # Tear down temporary nginx-init so port 80 is free for main nginx
-    echo "--> Tearing down temporary Nginx..."
+    info "Stopping temporary Nginx..."
     $DC --profile setup down
 
     # --- 8. APPLY FINAL NGINX CONFIG ---
-    echo "--> Applying full HTTPS proxy configurations..."
+    info "Writing Nginx TLS proxy config..."
     cat <<EOF > ./nginx/sites-enabled/fullnode.conf
 
 upstream fullnode_8545 {
@@ -458,23 +505,24 @@ EOF
 fi
 
 # --- 9. FINAL LAUNCH ---
-# Use start_coti-full-node.sh (sources .env, pulls images, starts services)
-echo "--> Starting up the full node stack..."
+info "Starting the full node stack..."
 ./start_coti-full-node.sh
 
-echo "====================================================="
-echo " SUCCESS! Your COTI full node is initializing."
+_w ""
+_div
+ok "COTI full node is starting."
+_w ""
 if [[ "$NGINX_ENABLED" != "true" ]]; then
-    echo " Mode: node-only (no nginx/SSL). Access RPC/WS on ports 8545/8546."
+    _w "  • Mode: ${_B}node only${_R} (no Nginx/SSL in Docker)"
+    _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
 else
-    echo " FQDN: https://$FQDN"
+    _w "  • HTTPS: ${_B}https://$FQDN${_R}"
 fi
 if [[ "$FRPC_ENABLED" == "true" ]]; then
-    echo " FRPC RPC relay: enabled"
-    echo " FRPS gateways: $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
-    echo " Public RPC domain: ${FRPC_CUSTOM_DOMAIN}"
+    _w "  • FRPC: ${_B}enabled${_R} — gateways $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
+    _w "  • Public RPC host: ${FRPC_CUSTOM_DOMAIN}"
 else
-    echo " FRPC RPC relay: disabled"
+    _w "  • FRPC: ${_D}disabled${_R} (enable with --frpc-enabled=true)"
 fi
-echo " Use 'docker logs -f coti-$NETWORK-full-node' to view logs."
-echo "====================================================="
+_w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
+_div
