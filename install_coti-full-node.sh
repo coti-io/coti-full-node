@@ -101,7 +101,7 @@ if [ -f "$INSTALLER_ENV_FILE" ]; then
 fi
 
 # Default values (can be overridden in installer.env)
-: "${DISK_SPACE_REQUIRED:=40}"      # GB
+: "${DISK_SPACE_REQUIRED:=90}"      # GB
 
 print_requirements
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
