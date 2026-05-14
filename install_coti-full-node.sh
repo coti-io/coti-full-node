@@ -131,7 +131,6 @@ DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-$DOCKER_FULL_NODE_IMAGE_VERSION}"
 : "${FRPS_SERVER_PORT:=7000}"
 : "${FRPC_CUSTOM_DOMAIN:=}"
 : "${FRPC_AUTH_TOKEN:=}"
-: "${COTI_FULL_NODE_RPC_LOCAL_PORT:=8545}"
 
 # --- ROOT CHECK ---
 if [ "$(id -u)" -ne 0 ]; then
@@ -289,11 +288,6 @@ fi
 
 if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [ "$FRPS_SERVER_PORT" -gt 65535 ]; then
     printf '%s\n' "${_Y}ERROR:${_R} FRPS_SERVER_PORT must be a valid TCP port (1–65535)."
-    exit 1
-fi
-
-if [[ ! "$COTI_FULL_NODE_RPC_LOCAL_PORT" =~ ^[0-9]+$ ]] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -lt 1 ] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -gt 65535 ]; then
-    printf '%s\n' "${_Y}ERROR:${_R} COTI_FULL_NODE_RPC_LOCAL_PORT must be a valid TCP port (1–65535)."
     exit 1
 fi
 
@@ -482,7 +476,6 @@ FRPS_SERVER_ADDR_2=$FRPS_SERVER_ADDR_2
 FRPS_SERVER_PORT=$FRPS_SERVER_PORT
 FRPC_CUSTOM_DOMAIN=$FRPC_CUSTOM_DOMAIN
 FRPC_AUTH_TOKEN=$FRPC_AUTH_TOKEN
-COTI_FULL_NODE_RPC_LOCAL_PORT=$COTI_FULL_NODE_RPC_LOCAL_PORT
 EOF
 
 # --- 5. CONFIGURE PRIVATE KEY (NODEKEY) ---
@@ -618,7 +611,7 @@ if [[ "$NGINX_ENABLED" != "true" ]]; then
     if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" == "true" ]]; then
         _w "  • COTI tunnel: public HTTPS/RPC at ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}${_R} (edge TLS + DNS by COTI; FRPC to this node)"
     else
-        _w "  • RPC / WS: published on host ports ${COTI_FULL_NODE_RPC_LOCAL_PORT} / 8546 (see docker-compose)"
+        _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
     fi
 else
     _w "  • HTTPS: ${_B}https://$FQDN${_R}"
