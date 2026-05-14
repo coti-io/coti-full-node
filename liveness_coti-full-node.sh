@@ -14,8 +14,8 @@ if [ -f installer.env ] || [ -f .env ]; then
     set +a
 fi
 
-: "${COTI_FULL_NODE_RPC_LOCAL_PORT:=8545}"
-RPC_URL="http://127.0.0.1:${COTI_FULL_NODE_RPC_LOCAL_PORT}"
+# RPC/WS are fixed at 8545/8546 on the host (see docker-compose.yml).
+RPC_URL="http://127.0.0.1:8545"
 
 # Number of checks
 CHECKS=5
