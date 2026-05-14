@@ -6,6 +6,7 @@ Binds inside the container on 0.0.0.0; map host to 127.0.0.1 only in docker-comp
 
 from __future__ import annotations
 
+import html
 import json
 import os
 import socket
@@ -27,6 +28,16 @@ FRPC_ENABLED = os.environ.get("FRPC_ENABLED", "false").lower() == "true"
 FRPC_CUSTOM_DOMAIN = (os.environ.get("FRPC_CUSTOM_DOMAIN") or "").strip()
 FRPS_SERVER_ADDR = (os.environ.get("FRPS_SERVER_ADDR") or os.environ.get("FRPS_SERVER_ADDR_1") or "").strip()
 FRPS_SERVER_PORT = int(os.environ.get("FRPS_SERVER_PORT", "7000") or "7000")
+
+
+def _normalize_dashboard_path(path: str) -> str:
+    """Map /operator and /operator/... to paths seen when served without a reverse-proxy prefix."""
+    if path.startswith("/operator"):
+        rest = path[len("/operator") :]
+        if not rest or rest == "/":
+            return "/"
+        return rest if rest.startswith("/") else f"/{rest}"
+    return path
 
 
 def _rpc(method: str, params: list[Any] | None = None) -> dict[str, Any]:
@@ -335,7 +346,8 @@ def collect_status() -> dict[str, Any]:
                 }
             )
         if FRPC_CUSTOM_DOMAIN:
-            tunnel_url = f"https://{FRPC_CUSTOM_DOMAIN.rstrip('/')}/"
+            base = FRPC_CUSTOM_DOMAIN.rstrip("/")
+            tunnel_url = f"https://{base}/rpc"
             try:
                 ctx = ssl.create_default_context()
                 req = Request(tunnel_url, method="HEAD")
@@ -466,6 +478,7 @@ INDEX_HTML = """<!DOCTYPE html>
 <body>
   <h1>COTI Full Node — Status</h1>
   <p class="sub">Open this page on the same machine where the node runs. It refreshes every 15 seconds.</p>
+  __EXTRA_SUB__
   <div id="app"><div class="banner"><span class="spin">⟳</span> Loading…</div></div>
   <footer>Problems persist? Save this page (or a screenshot) when asking for help.</footer>
   <script>
@@ -485,9 +498,16 @@ INDEX_HTML = """<!DOCTYPE html>
     function escapeHtml(s) {
       return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     }
+    function apiStatusUrl() {
+      let p = window.location.pathname || '/';
+      if (p.toLowerCase().endsWith('/index.html')) p = p.slice(0, -10) || '/';
+      if (p.length > 1 && p.endsWith('/')) p = p.slice(0, -1);
+      if (p === '/' || p === '') return '/api/status';
+      return p + '/api/status';
+    }
     async function load() {
       try {
-        const r = await fetch('/api/status', { cache: 'no-store' });
+        const r = await fetch(apiStatusUrl(), { cache: 'no-store' });
         render(await r.json());
       } catch (e) {
         document.getElementById('app').innerHTML =
@@ -502,6 +522,28 @@ INDEX_HTML = """<!DOCTYPE html>
 """
 
 
+def _extra_sub_html() -> str:
+    blocks: list[str] = []
+    if NGINX_ENABLED and FULLNODE_FQDN:
+        u = f"https://{FULLNODE_FQDN}/operator/"
+        blocks.append(
+            f'<p class="sub">HTTPS (this host): <a href="{html.escape(u)}">{html.escape(u)}</a></p>'
+        )
+    if FRPC_ENABLED and FRPC_CUSTOM_DOMAIN:
+        u = f"https://{FRPC_CUSTOM_DOMAIN.rstrip('/')}/operator/"
+        blocks.append(
+            f'<p class="sub">HTTPS (COTI tunnel): <a href="{html.escape(u)}">{html.escape(u)}</a></p>'
+        )
+    return "\n  ".join(blocks)
+
+
+def _index_html() -> str:
+    return INDEX_HTML.replace("__EXTRA_SUB__", _extra_sub_html())
+
+
+INDEX_HTML_BYTES = _index_html().encode()
+
+
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -511,8 +553,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
+        path = _normalize_dashboard_path(path)
         if path in ("/", "/index.html"):
-            body = INDEX_HTML.encode()
+            body = INDEX_HTML_BYTES
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
