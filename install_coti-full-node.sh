@@ -30,7 +30,7 @@ print_welcome() {
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
     _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--with-nginx${_R} or ${_U}NGINX_ENABLED=true${_R})"
-    _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} = wizard tunnel: FRPC on, no Nginx; ${_U}--frpc${_R} = FRPC only)"
+    _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} = COTI wizard tunnel: FRPC on, no Nginx; ${_U}--frpc-enabled=true${_R} = FRPC relay only, no wizard)"
     _w "  8. Start the stack"
     _w ""
     _div
@@ -94,7 +94,10 @@ if declare -p FRPS_SERVER_ADDR_2 >/dev/null 2>&1; then
 fi
 
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
+# IMAGE (optional, in installer.env) overrides DOCKER_FULL_NODE_IMAGE_VERSION for upgrades.
+DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-$DOCKER_FULL_NODE_IMAGE_VERSION}"
 : "${CLONE_BRANCH:=coti-testnet}"
+# Default network label for this installer package (mainnet builds set NETWORK=mainnet here).
 : "${NETWORK:=testnet}"
 : "${NGINX_ENABLED:=false}"
 : "${FRPC_ENABLED:=false}"
@@ -182,7 +185,7 @@ PK="${POSITIONAL[0]:-}"
 FQDN="${POSITIONAL[1]:-}"
 
 if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" != "true" ]]; then
-    printf '%s\n' "${_Y}ERROR:${_R} COTI tunnel install requires FRPC (--with-frp implies --frpc)."
+    printf '%s\n' "${_Y}ERROR:${_R} COTI tunnel install requires FRPC enabled (use ${_U}--with-frp${_R})."
     exit 1
 fi
 
@@ -305,7 +308,7 @@ if [[ "$NGINX_ENABLED" == "true" ]]; then
 fi
 
 # --- 1e. CHECK PORT 7400 IS AVAILABLE ---
-if ss -tlnp 2>/dev/null | grep -qE "7400\s"; then
+if ss -tlnp 2>/dev/null | grep -qE ':7400(\s|$)'; then
     printf '%s\n' "${_Y}ERROR:${_R} Port 7400 is already in use."
     exit 1
 fi
@@ -403,9 +406,31 @@ info "Cloning coti-full-node (${CLONE_BRANCH})..."
 git clone -b "$CLONE_BRANCH" https://github.com/coti-io/coti-full-node.git
 cd coti-full-node
 
+# Persist installation-level settings into the clone (image tag, network, etc.).
+# Per-host values go in .env; operators upgrade the container image by editing DOCKER_FULL_NODE_IMAGE_VERSION or IMAGE here.
+info "Writing installer.env (installation metadata)..."
+cat <<EOF > installer.env
+# Installation / packaging defaults for this checkout (not host-specific).
+# Per-host settings are in .env (sourced after this file by start/stop scripts).
+#
+# Bump DOCKER_FULL_NODE_IMAGE_VERSION (or set IMAGE=) to upgrade the node image, then run ./start_coti-full-node.sh
+
+DISK_SPACE_REQUIRED=${DISK_SPACE_REQUIRED}
+DOCKER_FULL_NODE_IMAGE_VERSION=${DOCKER_FULL_NODE_IMAGE_VERSION}
+CLONE_BRANCH=${CLONE_BRANCH}
+NETWORK=${NETWORK}
+EOF
+
 # --- 4. GENERATE .ENV FILE ---
 info "Writing .env..."
-EXT_IP=$(curl -s https://api.ipify.org)
+if ! EXT_IP=$(curl -fsS --connect-timeout 10 --max-time 20 https://api.ipify.org); then
+    printf '%s\n' "${_Y}ERROR:${_R} Could not detect public IP (api.ipify.org). Check outbound HTTPS and re-run."
+    exit 1
+fi
+if [ -z "$EXT_IP" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Public IP lookup returned an empty response."
+    exit 1
+fi
 
 cat <<EOF > .env
 FULLNODE_EXT_IP=$EXT_IP
@@ -427,21 +452,22 @@ info "Writing node key..."
 echo -n "$PK_CLEAN" > ./nodekey
 
 # --- 5b. CONFIGURE FRPC (RPC RELAY ONLY) ---
-FRPC_AUTH_BLOCK=""
-if [ -n "$FRPC_AUTH_TOKEN" ]; then
-    FRPC_AUTH_BLOCK=$(cat <<EOF
+if [[ "$FRPC_ENABLED" == "true" ]]; then
+    FRPC_AUTH_BLOCK=""
+    if [ -n "$FRPC_AUTH_TOKEN" ]; then
+        FRPC_AUTH_BLOCK=$(cat <<EOF
 auth.method = "token"
 auth.token = "$FRPC_AUTH_TOKEN"
 EOF
 )
-fi
+    fi
 
-for _frpc_toml_pair in \
-    "frpc-1.toml:$FRPS_SERVER_ADDR_1" \
-    "frpc-2.toml:$FRPS_SERVER_ADDR_2"; do
-    _frpc_toml_file="${_frpc_toml_pair%%:*}"
-    _frpc_server_addr="${_frpc_toml_pair#*:}"
-    cat <<EOF > "./$_frpc_toml_file"
+    for _frpc_toml_pair in \
+        "frpc-1.toml:$FRPS_SERVER_ADDR_1" \
+        "frpc-2.toml:$FRPS_SERVER_ADDR_2"; do
+        _frpc_toml_file="${_frpc_toml_pair%%:*}"
+        _frpc_server_addr="${_frpc_toml_pair#*:}"
+        cat <<EOF > "./$_frpc_toml_file"
 serverAddr = "$_frpc_server_addr"
 serverPort = $FRPS_SERVER_PORT
 $FRPC_AUTH_BLOCK
@@ -449,12 +475,13 @@ $FRPC_AUTH_BLOCK
 [[proxies]]
 name = "$FRPC_CUSTOM_DOMAIN"
 type = "http"
-localIP = "coti-testnet-full-node"
-localPort = $COTI_FULL_NODE_RPC_LOCAL_PORT
+localIP = "coti-${NETWORK}-full-node"
+localPort = 8545
 customDomains = ["$FRPC_CUSTOM_DOMAIN"]
 EOF
-done
-unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
+    done
+    unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
+fi
 
 # --- 6-8. SSL AND NGINX SETUP (skipped when NGINX_ENABLED=false) ---
 if [[ "$NGINX_ENABLED" == "true" ]]; then
@@ -552,7 +579,7 @@ if [[ "$NGINX_ENABLED" != "true" ]]; then
     if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" == "true" ]]; then
         _w "  • COTI tunnel: public HTTPS/RPC at ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}${_R} (edge TLS + DNS by COTI; FRPC to this node)"
     else
-        _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
+        _w "  • RPC / WS: published on host ports ${COTI_FULL_NODE_RPC_LOCAL_PORT} / 8546 (see docker-compose)"
     fi
 else
     _w "  • HTTPS: ${_B}https://$FQDN${_R}"
@@ -564,7 +591,7 @@ if [[ "$FRPC_ENABLED" == "true" ]]; then
         _w "  • Inbound firewall: ${_B}not required${_R} for 80/443/7400 from the internet (outbound FRP + local P2P)"
     fi
 else
-    _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; or ${_U}--frpc${_R})"
+    _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; relay only: ${_U}--frpc-enabled=true${_R})"
 fi
 _w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
 _div
