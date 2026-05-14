@@ -1,0 +1,568 @@
+#!/bin/bash
+# COTI Full Node — macOS installer (standalone; use install_coti-full-node.sh on Ubuntu/WSL).
+set -e
+
+# --- Terminal styling (no-op when stdout is not a TTY) ---
+if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    _B=$(tput bold 2>/dev/null || true)
+    _D=$(tput dim 2>/dev/null || true)
+    _U=$(tput smul 2>/dev/null || true)
+    _R=$(tput sgr0 2>/dev/null || true)
+    _C=$(tput setaf 6 2>/dev/null || true)
+    _G=$(tput setaf 2 2>/dev/null || true)
+    _Y=$(tput setaf 3 2>/dev/null || true)
+else
+    _B="" _D="" _U="" _R="" _C="" _G="" _Y=""
+fi
+
+_w() { printf '%s\n' "$*"; }
+_banner_line() { printf '%s\n' "${_C}${_B}$*${_R}"; }
+_div() { printf '%s\n' "${_D}────────────────────────────────────────────────────${_R}"; }
+
+info() { printf '%s\n' "${_C}→${_R} $*"; }
+ok() { printf '%s\n' "${_G}✓${_R} $*"; }
+
+# macOS: true if something is listening on TCP port $1
+_tcp_port_in_use() {
+    local port="$1"
+    if command -v lsof >/dev/null 2>&1; then
+        lsof -nP -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1
+    else
+        return 1
+    fi
+}
+
+print_welcome() {
+    _div
+    _banner_line "  COTI Full Node — macOS installer"
+    _div
+    _w ""
+    _w "${_B}Planned steps${_R}"
+    _w "  1. OS validation (macOS)"
+    _w "  2. Validate inputs (private key, FQDN)"
+    _w "  3. Check Docker + install tools (Homebrew) if needed"
+    _w "  4. Clone repository and prepare directory"
+    _w "  5. Generate .env and node identity"
+    _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; ${_U}--with-nginx${_R})"
+    _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} / ${_U}--frpc-enabled=true${_R})"
+    _w "  8. Start the stack"
+    _w ""
+    _div
+}
+
+print_requirements() {
+    _div
+    _banner_line "  Requirements (macOS)"
+    _div
+    _w "  • macOS with ${_B}Docker Desktop${_R} or another Docker engine (Colima, etc.); \`docker\` and \`docker compose\` must work"
+    _w "  • ${_B}Homebrew${_R} (https://brew.sh) — used to install jq, certbot (if Nginx), git if missing"
+    _w "  • ${_B}Nginx + TLS:${_R} certificates and Certbot state live under ${_U}./nginx/letsencrypt*${_R} in the clone (no elevated privileges in this script)"
+    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
+    _w "  • Port 7400 must be free on the host for published P2P (see docker-compose)"
+    _w "  • ${_B}With Nginx/SSL:${_R} host ports 80 and 443 free"
+    _w "  • ${_B}With --with-frp${_R}: COTI wizard tunnel — no host Nginx; inbound 80/443/7400 not required on your router"
+    _w ""
+    _div
+}
+
+FULLNODE_INSTALLER_MAC_URL="${FULLNODE_INSTALLER_MAC_URL:-https://raw.githubusercontent.com/coti-io/coti-full-node/coti-testnet/install_coti-full-node-mac.sh}"
+
+print_install_curl_examples() {
+    _w "macOS (example; set branch to match your network):"
+    _w "  curl -sL https://raw.githubusercontent.com/coti-io/coti-full-node/development/install_coti-full-node-mac.sh \\"
+    _w "    | env CLONE_BRANCH=development bash -s -- \"0x...\" \"your.domain\" --with-frp"
+    _w ""
+    _w "Default URL constant (override when mirroring): ${FULLNODE_INSTALLER_MAC_URL}"
+}
+
+# --- 0a. OS: Darwin only ---
+if [ "$(uname -s)" != "Darwin" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} This script is for macOS only."
+    _w "On Ubuntu or WSL, use install_coti-full-node.sh (with sudo)."
+    exit 1
+fi
+
+# --- 0b. Do not run as root (Homebrew; Docker Desktop) ---
+if [ "$(id -u)" -eq 0 ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Do not run this macOS installer as root or with sudo."
+    _w ""
+    print_install_curl_examples
+    exit 1
+fi
+
+print_welcome
+read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
+_w ""
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+INSTALLER_ENV_FILE="$SCRIPT_DIR/installer.env"
+if [ -f "$INSTALLER_ENV_FILE" ]; then
+    # shellcheck source=/dev/null
+    . "$INSTALLER_ENV_FILE"
+fi
+
+: "${DISK_SPACE_REQUIRED:=40}"
+
+print_requirements
+read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
+_w ""
+
+_FRPS_SERVER_ADDR_1_FROM_ENV=false
+_FRPS_SERVER_ADDR_2_FROM_ENV=false
+if declare -p FRPS_SERVER_ADDR_1 >/dev/null 2>&1; then
+    _FRPS_SERVER_ADDR_1_FROM_ENV=true
+fi
+if declare -p FRPS_SERVER_ADDR_2 >/dev/null 2>&1; then
+    _FRPS_SERVER_ADDR_2_FROM_ENV=true
+fi
+
+: "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
+DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-$DOCKER_FULL_NODE_IMAGE_VERSION}"
+: "${CLONE_BRANCH:=coti-testnet}"
+: "${NETWORK:=testnet}"
+: "${NGINX_ENABLED:=false}"
+: "${FRPC_ENABLED:=false}"
+: "${FRPS_SERVER_ADDR:=}"
+: "${FRPS_SERVER_ADDR_1:=virginia.fullnode.testnet.coti.io}"
+: "${FRPS_SERVER_ADDR_2:=frankfurt.fullnode.testnet.coti.io}"
+: "${FRPS_SERVER_PORT:=7000}"
+: "${FRPC_CUSTOM_DOMAIN:=}"
+: "${FRPC_AUTH_TOKEN:=}"
+: "${COTI_FULL_NODE_RPC_LOCAL_PORT:=8545}"
+
+FRPS_SERVER_ADDR_1_EXPLICIT=false
+FRPS_SERVER_ADDR_2_EXPLICIT=false
+COTI_TUNNEL_INSTALL=false
+POSITIONAL=()
+for arg in "$@"; do
+    case "$arg" in
+        --without-nginx)
+            NGINX_ENABLED=false
+            ;;
+        --with-nginx)
+            NGINX_ENABLED=true
+            COTI_TUNNEL_INSTALL=false
+            ;;
+        --nginx-enabled=*)
+            NGINX_ENABLED="${arg#*=}"
+            if [[ "$NGINX_ENABLED" == "true" ]]; then
+                COTI_TUNNEL_INSTALL=false
+            fi
+            ;;
+        --staging)
+            CERTBOT_STAGING=true
+            ;;
+        --with-frp)
+            FRPC_ENABLED=true
+            NGINX_ENABLED=false
+            COTI_TUNNEL_INSTALL=true
+            ;;
+        --without-frp)
+            FRPC_ENABLED=false
+            COTI_TUNNEL_INSTALL=false
+            ;;
+        --frpc-enabled=*)
+            FRPC_ENABLED="${arg#*=}"
+            if [[ "$FRPC_ENABLED" != "true" ]]; then
+                COTI_TUNNEL_INSTALL=false
+            fi
+            ;;
+        --frpc-custom-domain=*)
+            FRPC_CUSTOM_DOMAIN="${arg#*=}"
+            ;;
+        --frpc-auth-token=*)
+            FRPC_AUTH_TOKEN="${arg#*=}"
+            ;;
+        --frps-server-addr=*)
+            FRPS_SERVER_ADDR="${arg#*=}"
+            ;;
+        --frps-server-addr-1=*)
+            FRPS_SERVER_ADDR_1="${arg#*=}"
+            FRPS_SERVER_ADDR_1_EXPLICIT=true
+            ;;
+        --frps-server-addr-2=*)
+            FRPS_SERVER_ADDR_2="${arg#*=}"
+            FRPS_SERVER_ADDR_2_EXPLICIT=true
+            ;;
+        --frps-server-port=*)
+            FRPS_SERVER_PORT="${arg#*=}"
+            ;;
+        *)
+            POSITIONAL+=("$arg")
+            ;;
+    esac
+done
+
+PK="${POSITIONAL[0]:-}"
+FQDN="${POSITIONAL[1]:-}"
+
+if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" != "true" ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} COTI tunnel install requires FRPC enabled (use ${_U}--with-frp${_R})."
+    exit 1
+fi
+
+if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
+    if [[ "$FRPS_SERVER_ADDR_1_EXPLICIT" != "true" ]] && [[ "$_FRPS_SERVER_ADDR_1_FROM_ENV" != "true" ]]; then
+        FRPS_SERVER_ADDR_1="$FRPS_SERVER_ADDR"
+    fi
+    if [[ "$FRPS_SERVER_ADDR_2_EXPLICIT" != "true" ]] && [[ "$_FRPS_SERVER_ADDR_2_FROM_ENV" != "true" ]]; then
+        FRPS_SERVER_ADDR_2="$FRPS_SERVER_ADDR"
+    fi
+fi
+
+_div
+_banner_line "  Installing COTI Full Node (macOS)"
+_div
+_w ""
+
+# --- 0c. Optional macOS version notice ---
+MACOS_VER="$(sw_vers -productVersion 2>/dev/null || printf '%s' "unknown")"
+info "Detected macOS ${MACOS_VER}"
+
+# --- 1. VALIDATE REQUIRED INPUTS ---
+if [ -z "$FQDN" ] || [ -z "$PK" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Private key and FQDN are required."
+    _w ""
+    print_install_curl_examples
+    _w ""
+    _w "With Nginx + Let's Encrypt: append ${_U}--with-nginx${_R}"
+    _w "Wizard tunnel: ${_U}--with-frp${_R}"
+    exit 1
+fi
+
+PK_CLEAN="${PK#0x}"
+
+if [[ ! "$PK_CLEAN" =~ ^[0-9a-fA-F]{64}$ ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Private key must be 64 hex characters (32 bytes), with optional 0x prefix."
+    printf '%s\n' "Got ${#PK_CLEAN} hex characters after stripping 0x."
+    exit 1
+fi
+
+if [[ ! "$FQDN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || [ "${#FQDN}" -gt 253 ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} FQDN must be a valid hostname (letters, numbers, hyphens, dots; 1–253 chars)."
+    _w "Example: node1.fullnode.testnet.coti.io"
+    exit 1
+fi
+
+if [[ ! "$NGINX_ENABLED" =~ ^(true|false)$ ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} NGINX_ENABLED must be 'true' or 'false'."
+    exit 1
+fi
+
+if [[ ! "$FRPC_ENABLED" =~ ^(true|false)$ ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} FRPC_ENABLED must be 'true' or 'false'."
+    exit 1
+fi
+
+if [[ "$FRPC_ENABLED" == "true" ]] && [ -z "$FRPC_CUSTOM_DOMAIN" ]; then
+    FRPC_CUSTOM_DOMAIN="$FQDN"
+fi
+
+if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [ "$FRPS_SERVER_PORT" -gt 65535 ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} FRPS_SERVER_PORT must be a valid TCP port (1–65535)."
+    exit 1
+fi
+
+if [[ ! "$COTI_FULL_NODE_RPC_LOCAL_PORT" =~ ^[0-9]+$ ]] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -lt 1 ] || [ "$COTI_FULL_NODE_RPC_LOCAL_PORT" -gt 65535 ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} COTI_FULL_NODE_RPC_LOCAL_PORT must be a valid TCP port (1–65535)."
+    exit 1
+fi
+
+info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}$([[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && printf ' · %s' "${_B}COTI tunnel (wizard)${_R}")"
+_w ""
+
+INSTALL_DIR="$(pwd)"
+if [ ! -w "$INSTALL_DIR" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Cannot write to current directory ($INSTALL_DIR)."
+    _w "Run from a writable directory (for example cd ~ && mkdir coti && cd coti)."
+    exit 1
+fi
+
+REQUIRED_KB=$((DISK_SPACE_REQUIRED * 1024 * 1024))
+AVAIL_KB=$(df -k "$INSTALL_DIR" | awk 'NR==2 {print $4}')
+if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
+    if [ -n "$AVAIL_KB" ]; then
+        AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
+        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free in $INSTALL_DIR (about ${AVAIL_GB} GB available)."
+    else
+        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for $INSTALL_DIR."
+    fi
+    exit 1
+fi
+
+if [[ "$NGINX_ENABLED" == "true" ]]; then
+    for port in 80 443; do
+        if _tcp_port_in_use "$port"; then
+            printf '%s\n' "${_Y}ERROR:${_R} Port $port is in use. Nginx needs 80 and 443 free on the Mac."
+            exit 1
+        fi
+    done
+fi
+
+if _tcp_port_in_use 7400; then
+    printf '%s\n' "${_Y}ERROR:${_R} Port 7400 is already in use on the Mac."
+    exit 1
+fi
+
+# macOS: skip Linux ufw/iptables checks
+
+# --- 2. DOCKER + HOMEBREW DEPENDENCIES ---
+if ! command -v docker >/dev/null 2>&1; then
+    printf '%s\n' "${_Y}ERROR:${_R} Docker is not in PATH."
+    _w "Install Docker Desktop (https://www.docker.com/products/docker-desktop/) or Colima, then re-run."
+    exit 1
+fi
+
+if ! docker info >/dev/null 2>&1; then
+    printf '%s\n' "${_Y}ERROR:${_R} Docker daemon is not reachable. Start Docker Desktop (or your engine) and try again."
+    exit 1
+fi
+
+if docker compose version >/dev/null 2>&1; then
+    DC="docker compose"
+elif command -v docker-compose >/dev/null 2>&1; then
+    DC="docker-compose"
+else
+    printf '%s\n' "${_Y}ERROR:${_R} Neither \`docker compose\` nor \`docker-compose\` is available."
+    _w "Update Docker Desktop or install the Compose plugin / standalone docker-compose."
+    exit 1
+fi
+
+if ! command -v brew >/dev/null 2>&1; then
+    printf '%s\n' "${_Y}ERROR:${_R} Homebrew not found (brew)."
+    _w "Install from https://brew.sh then ensure brew is on your PATH and re-run."
+    exit 1
+fi
+
+_brew_install_if_missing() {
+    local formula="$1"
+    if brew list --formula "$formula" >/dev/null 2>&1; then
+        return 0
+    fi
+    info "Installing $formula via Homebrew..."
+    brew install "$formula"
+}
+
+if ! command -v git >/dev/null 2>&1; then
+    _brew_install_if_missing git
+fi
+if ! command -v jq >/dev/null 2>&1; then
+    _brew_install_if_missing jq
+fi
+if [[ "$NGINX_ENABLED" == "true" ]]; then
+    if ! command -v certbot >/dev/null 2>&1; then
+        _brew_install_if_missing certbot
+    fi
+fi
+
+if ! command -v curl >/dev/null 2>&1; then
+    printf '%s\n' "${_Y}ERROR:${_R} curl not found."
+    exit 1
+fi
+
+# --- 3. CLONE/PREPARE DIRECTORY ---
+if [ -f "docker-compose.yml" ] || [ -d "coti-full-node" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Current directory is not clean for a fresh install."
+    _w "  • docker-compose.yml present, or"
+    _w "  • coti-full-node/ already exists"
+    _w "Use an empty directory and run again."
+    exit 1
+fi
+
+info "Cloning coti-full-node (${CLONE_BRANCH})..."
+git clone -b "$CLONE_BRANCH" https://github.com/coti-io/coti-full-node.git
+cd coti-full-node
+
+info "Writing installer.env (installation metadata)..."
+cat <<EOF > installer.env
+# Installation / packaging defaults for this checkout (not host-specific).
+# Per-host settings are in .env (sourced after this file by start/stop scripts).
+#
+# Bump DOCKER_FULL_NODE_IMAGE_VERSION (or set IMAGE=) to upgrade the node image, then run ./start_coti-full-node.sh
+
+DISK_SPACE_REQUIRED=${DISK_SPACE_REQUIRED}
+DOCKER_FULL_NODE_IMAGE_VERSION=${DOCKER_FULL_NODE_IMAGE_VERSION}
+CLONE_BRANCH=${CLONE_BRANCH}
+NETWORK=${NETWORK}
+EOF
+
+info "Writing .env..."
+if ! EXT_IP=$(curl -fsS --connect-timeout 10 --max-time 20 https://api.ipify.org); then
+    printf '%s\n' "${_Y}ERROR:${_R} Could not detect public IP (api.ipify.org). Check outbound HTTPS and re-run."
+    exit 1
+fi
+if [ -z "$EXT_IP" ]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Public IP lookup returned an empty response."
+    exit 1
+fi
+
+cat <<EOF > .env
+FULLNODE_EXT_IP=$EXT_IP
+FULLNODE_FQDN=$FQDN
+NGINX_ENABLED=$NGINX_ENABLED
+FRPC_ENABLED=$FRPC_ENABLED
+FRPS_SERVER_ADDR=$FRPS_SERVER_ADDR
+FRPS_SERVER_ADDR_1=$FRPS_SERVER_ADDR_1
+FRPS_SERVER_ADDR_2=$FRPS_SERVER_ADDR_2
+FRPS_SERVER_PORT=$FRPS_SERVER_PORT
+FRPC_CUSTOM_DOMAIN=$FRPC_CUSTOM_DOMAIN
+FRPC_AUTH_TOKEN=$FRPC_AUTH_TOKEN
+COTI_FULL_NODE_RPC_LOCAL_PORT=$COTI_FULL_NODE_RPC_LOCAL_PORT
+EOF
+
+info "Writing node key..."
+echo -n "$PK_CLEAN" > ./nodekey
+
+if [[ "$FRPC_ENABLED" == "true" ]]; then
+    FRPC_AUTH_BLOCK=""
+    if [ -n "$FRPC_AUTH_TOKEN" ]; then
+        FRPC_AUTH_BLOCK=$(cat <<EOF
+auth.method = "token"
+auth.token = "$FRPC_AUTH_TOKEN"
+EOF
+)
+    fi
+
+    for _frpc_toml_pair in \
+        "frpc-1.toml:$FRPS_SERVER_ADDR_1" \
+        "frpc-2.toml:$FRPS_SERVER_ADDR_2"; do
+        _frpc_toml_file="${_frpc_toml_pair%%:*}"
+        _frpc_server_addr="${_frpc_toml_pair#*:}"
+        cat <<EOF > "./$_frpc_toml_file"
+serverAddr = "$_frpc_server_addr"
+serverPort = $FRPS_SERVER_PORT
+$FRPC_AUTH_BLOCK
+
+[[proxies]]
+name = "$FRPC_CUSTOM_DOMAIN"
+type = "http"
+localIP = "coti-${NETWORK}-full-node"
+localPort = 8545
+customDomains = ["$FRPC_CUSTOM_DOMAIN"]
+EOF
+    done
+    unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
+fi
+
+if [[ "$NGINX_ENABLED" == "true" ]]; then
+    info "Preparing Let's Encrypt HTTP-01 challenge..."
+    mkdir -p ./nginx/certbot ./nginx/sites-enabled
+    mkdir -p ./nginx/letsencrypt ./nginx/letsencrypt-work ./nginx/letsencrypt-logs
+
+    # Project-local Certbot dirs (no /etc/letsencrypt on the host). Patch compose so Nginx mounts the same tree.
+    info "Pointing docker-compose Nginx volume to ./nginx/letsencrypt (macOS installer)..."
+    sed -i '' 's|- /etc/letsencrypt:/etc/letsencrypt:ro|- ./nginx/letsencrypt:/etc/letsencrypt:ro|' docker-compose.yml
+    if ! grep -qF './nginx/letsencrypt:/etc/letsencrypt:ro' docker-compose.yml; then
+        printf '%s\n' "${_Y}ERROR:${_R} Could not set Nginx bind mount to ./nginx/letsencrypt in docker-compose.yml."
+        _w "Expected a line containing: - /etc/letsencrypt:/etc/letsencrypt:ro"
+        exit 1
+    fi
+
+    info "Starting temporary Nginx for ACME..."
+    $DC --profile setup up -d nginx-init
+
+    CERTBOT_EXTRA=""
+    if [[ "$CERTBOT_STAGING" == "true" ]]; then
+        info "Requesting certificate for $FQDN (${_Y}Let's Encrypt staging${_R} — not browser-trusted)..."
+        CERTBOT_EXTRA="--staging"
+    else
+        info "Requesting certificate for $FQDN..."
+    fi
+    _le_root="$(pwd)/nginx"
+    certbot certonly --webroot -w "$(pwd)/nginx/certbot" -d "$FQDN" $CERTBOT_EXTRA \
+        --config-dir "$_le_root/letsencrypt" \
+        --work-dir "$_le_root/letsencrypt-work" \
+        --logs-dir "$_le_root/letsencrypt-logs" \
+        --register-unsafely-without-email --agree-tos --non-interactive
+    unset _le_root
+
+    info "Stopping temporary Nginx..."
+    $DC --profile setup down
+
+    info "Writing Nginx TLS proxy config..."
+    cat <<EOF > ./nginx/sites-enabled/fullnode.conf
+
+upstream fullnode_8545 {
+    server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
+}
+
+upstream fullnode_8546 {
+    server coti-$NETWORK-full-node:8546  max_fails=3 fail_timeout=30s;
+}
+
+upstream fullnode_6000 {
+    server coti-$NETWORK-full-node:6000  max_fails=3 fail_timeout=30s;
+}
+
+server {
+    listen 443 ssl;
+    server_name $FQDN;
+
+    ssl_certificate     /etc/letsencrypt/live/$FQDN/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$FQDN/privkey.pem;
+    ssl_session_timeout 5m;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+
+    location /ws {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$http_host;
+        proxy_pass http://fullnode_8546/;
+    }
+
+    location /rpc {
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_pass http://fullnode_8545/;
+    }
+
+    location /metrics {
+        proxy_set_header Host \$host;
+        proxy_pass http://fullnode_6000/debug/metrics/prometheus;
+    }
+}
+
+server {
+    listen 80;
+    server_name $FQDN;
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+EOF
+fi
+
+info "Starting the full node stack..."
+./start_coti-full-node.sh
+
+_w ""
+_div
+ok "COTI full node is starting."
+_w ""
+if [[ "$NGINX_ENABLED" != "true" ]]; then
+    _w "  • Mode: ${_B}no Nginx/SSL on this host${_R}"
+    if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" == "true" ]]; then
+        _w "  • COTI tunnel: public HTTPS/RPC at ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}${_R} (edge TLS + DNS by COTI; FRPC to this node)"
+    else
+        _w "  • RPC / WS: published on host ports ${COTI_FULL_NODE_RPC_LOCAL_PORT} / 8546 (see docker-compose)"
+    fi
+else
+    _w "  • HTTPS: ${_B}https://$FQDN${_R}"
+fi
+if [[ "$FRPC_ENABLED" == "true" ]]; then
+    _w "  • FRPC: ${_B}enabled${_R} — gateways $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
+    _w "  • FRPC custom domain (proxy name): ${FRPC_CUSTOM_DOMAIN}"
+    if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]]; then
+        _w "  • Inbound firewall: ${_B}not required${_R} for 80/443/7400 from the internet (outbound FRP + local P2P)"
+    fi
+else
+    _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; relay only: ${_U}--frpc-enabled=true${_R})"
+fi
+_w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
+_div
