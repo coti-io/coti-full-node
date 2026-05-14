@@ -59,7 +59,7 @@ services:
       coti-testnet-full-node-genesis:
         condition: service_completed_successfully
     volumes:
-      - coti-execution-data:/execution
+      - coti-testnet-execution-data:/execution
       - ./nodekey:/execution/geth/nodekey
     logging:
       driver: "json-file"
