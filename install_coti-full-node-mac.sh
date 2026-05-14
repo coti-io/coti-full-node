@@ -126,7 +126,7 @@ if [ -f "$INSTALLER_ENV_FILE" ]; then
     . "$INSTALLER_ENV_FILE"
 fi
 
-: "${DISK_SPACE_REQUIRED:=40}"
+: "${DISK_SPACE_REQUIRED:=90}"
 
 print_requirements
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
