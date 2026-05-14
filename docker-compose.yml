@@ -98,7 +98,10 @@ services:
     profiles:
       - frpc
     depends_on:
-      - coti-testnet-full-node
+      coti-testnet-full-node:
+        condition: service_started
+      coti-testnet-operator-dashboard:
+        condition: service_started
     command:
       - -c
       - /etc/frp/frpc.toml
@@ -112,7 +115,10 @@ services:
     profiles:
       - frpc
     depends_on:
-      - coti-testnet-full-node
+      coti-testnet-full-node:
+        condition: service_started
+      coti-testnet-operator-dashboard:
+        condition: service_started
     command:
       - -c
       - /etc/frp/frpc.toml
@@ -136,6 +142,11 @@ services:
     container_name: nginx
     profiles:
       - proxy-nginx
+    depends_on:
+      coti-testnet-full-node:
+        condition: service_started
+      coti-testnet-operator-dashboard:
+        condition: service_started
     ports:
       - "80:80"
       - "443:443"

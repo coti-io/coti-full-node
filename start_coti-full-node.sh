@@ -62,3 +62,9 @@ echo "Node started. Checking liveness..."
 
 echo ""
 echo "Operator status page (same machine): http://127.0.0.1:8090"
+if [ "${NGINX_ENABLED:-false}" = "true" ] && [ -n "${FULLNODE_FQDN:-}" ]; then
+    echo "Operator status page (HTTPS, if TLS is configured): https://${FULLNODE_FQDN}/operator/"
+fi
+if [ "${FRPC_ENABLED:-false}" = "true" ] && [ -n "${FRPC_CUSTOM_DOMAIN:-}" ]; then
+    echo "Operator status page (COTI tunnel): https://${FRPC_CUSTOM_DOMAIN}/operator/"
+fi
