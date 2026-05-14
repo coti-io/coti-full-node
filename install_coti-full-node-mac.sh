@@ -54,7 +54,7 @@ print_requirements() {
     _div
     _banner_line "  Requirements (macOS)"
     _div
-    _w "  • macOS with ${_B}Docker Desktop${_R} or another Docker engine (Colima, etc.); \`docker\` and \`docker compose\` must work"
+    _w "  • ${_B}Docker${_R} installed ${_B}before${_R} you run this script (this installer does not install Docker). Use Docker Desktop or Colima; \`docker\` and \`docker compose\` must work"
     _w "  • ${_B}Homebrew${_R} (https://brew.sh) — used to install jq, certbot (if Nginx), git if missing"
     _w "  • ${_B}Nginx + TLS:${_R} certificates and Certbot state live under ${_U}./nginx/letsencrypt*${_R} in the clone (no elevated privileges in this script)"
     _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
@@ -81,6 +81,9 @@ if [ "$(uname -s)" != "Darwin" ]; then
     _w "On Ubuntu or WSL, use install_coti-full-node.sh (with sudo)."
     exit 1
 fi
+
+# Non-interactive bash (e.g. `curl … | bash`) often inherits a minimal PATH. Docker Desktop and Homebrew install CLIs here.
+export PATH="/usr/local/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:${HOME}/.docker/bin:${PATH}"
 
 # --- 0b. Do not run as root (Homebrew; Docker Desktop) ---
 if [ "$(id -u)" -eq 0 ]; then
@@ -308,8 +311,12 @@ fi
 
 # --- 2. DOCKER + HOMEBREW DEPENDENCIES ---
 if ! command -v docker >/dev/null 2>&1; then
-    printf '%s\n' "${_Y}ERROR:${_R} Docker is not in PATH."
-    _w "Install Docker Desktop (https://www.docker.com/products/docker-desktop/) or Colima, then re-run."
+    printf '%s\n' "${_Y}ERROR:${_R} \`docker\` not found (not on PATH)."
+    _w "This installer does ${_B}not${_R} install Docker (unlike the Ubuntu installer, which can install docker.io via apt)."
+    _w "Install Docker yourself, then re-run. Examples:"
+    _w "  • ${_B}Docker Desktop:${_R} https://www.docker.com/products/docker-desktop/ — or, with Homebrew: ${_U}brew install --cask docker${_R} then open Docker from Applications once."
+    _w "  • ${_B}Colima:${_R} ${_U}brew install colima docker${_R} then ${_U}colima start${_R}"
+    _w "If \`docker\` works in Terminal but failed here, PATH was too small for a piped script; this script already prepends common install locations."
     exit 1
 fi
 
