@@ -589,4 +589,5 @@ else
     _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; relay only: ${_U}--frpc-enabled=true${_R})"
 fi
 _w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
+_w "  • ${_B}Health check page${_R} (this machine): ${_U}http://127.0.0.1:8090${_R}"
 _div
