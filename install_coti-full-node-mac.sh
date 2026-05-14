@@ -22,6 +22,28 @@ _div() { printf '%s\n' "${_D}─────────────────
 info() { printf '%s\n' "${_C}→${_R} $*"; }
 ok() { printf '%s\n' "${_G}✓${_R} $*"; }
 
+# Free KiB on the filesystem backing Docker images/volumes (named chain data volumes live here).
+_docker_engine_avail_kb() {
+    local root kb
+    docker info >/dev/null 2>&1 || return 1
+    root=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null) || return 1
+    [ -n "$root" ] || return 1
+    root="${root%/}"
+    kb=$(docker run --rm -v /:/host:ro alpine:3.20 sh -c "df -Pk '/host${root}' 2>/dev/null | awk 'NR==2{print \$4}'" 2>/dev/null || true)
+    if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+        printf '%s\n' "$kb"
+        return 0
+    fi
+    if [ -e "$root" ]; then
+        kb=$(df -k "$root" 2>/dev/null | awk 'NR==2{print $4}')
+        if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+            printf '%s\n' "$kb"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # macOS: true if something is listening on TCP port $1
 _tcp_port_in_use() {
     local port="$1"
@@ -57,7 +79,7 @@ print_requirements() {
     _w "  • ${_B}Docker${_R} installed ${_B}before${_R} you run this script (this installer does not install Docker). Use Docker Desktop or Colima; \`docker\` and \`docker compose\` must work"
     _w "  • ${_B}Homebrew${_R} (https://brew.sh) — used to install jq, certbot (if Nginx), git if missing"
     _w "  • ${_B}Nginx + TLS:${_R} certificates and Certbot state live under ${_U}./nginx/letsencrypt*${_R} in the clone (no elevated privileges in this script)"
-    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
+    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB where Docker stores images/volumes (chain data uses a named volume, not the project folder)"
     _w "  • Port 7400 must be free on the host for published P2P (see docker-compose)"
     _w "  • ${_B}With Nginx/SSL:${_R} host ports 80 and 443 free"
     _w "  • ${_B}With --with-frp${_R}: COTI wizard tunnel — no host Nginx; inbound 80/443/7400 not required on your router"
@@ -281,18 +303,6 @@ if [ ! -w "$INSTALL_DIR" ]; then
     exit 1
 fi
 
-REQUIRED_KB=$((DISK_SPACE_REQUIRED * 1024 * 1024))
-AVAIL_KB=$(df -k "$INSTALL_DIR" | awk 'NR==2 {print $4}')
-if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
-    if [ -n "$AVAIL_KB" ]; then
-        AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
-        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free in $INSTALL_DIR (about ${AVAIL_GB} GB available)."
-    else
-        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for $INSTALL_DIR."
-    fi
-    exit 1
-fi
-
 if [[ "$NGINX_ENABLED" == "true" ]]; then
     for port in 80 443; do
         if _tcp_port_in_use "$port"; then
@@ -324,6 +334,20 @@ if ! docker info >/dev/null 2>&1; then
     printf '%s\n' "${_Y}ERROR:${_R} Docker daemon is not reachable. Start Docker Desktop (or your engine) and try again."
     exit 1
 fi
+
+REQUIRED_KB=$((DISK_SPACE_REQUIRED * 1024 * 1024))
+DOCKER_ROOT=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || true)
+AVAIL_KB=$(_docker_engine_avail_kb || true)
+if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
+    if [ -n "$AVAIL_KB" ]; then
+        AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
+        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free where Docker stores data (engine root: ${DOCKER_ROOT:-unknown}; about ${AVAIL_GB} GB available)."
+    else
+        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for the Docker engine (DockerRootDir: ${DOCKER_ROOT:-unknown}). Ensure Docker works and outbound image pulls are allowed (uses a short alpine:3.20 run)."
+    fi
+    exit 1
+fi
+ok "Docker engine disk: enough free space for chain data (named volume on ${DOCKER_ROOT:-Docker storage})"
 
 if docker compose version >/dev/null 2>&1; then
     DC="docker compose"

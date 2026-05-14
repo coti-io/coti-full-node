@@ -41,7 +41,7 @@ print_requirements() {
     _banner_line "  Requirements"
     _div
     _w "  • OS: Ubuntu 24.04 LTS (supported by COTI)"
-    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB in the install directory"
+    _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB where Docker stores images/volumes (chain data uses a named volume, not the project folder)"
     _w "  • Port 7400 must be free locally for the node container (P2P)"
     _w "  • ${_B}With Nginx/SSL:${_R} ports 80 and 443 free; firewall allows 80/443/7400"
     _w "  • ${_B}With --with-frp${_R} (COTI wizard tunnel): no Nginx on host; inbound 80/443/7400 on the ${_U}firewall${_R} not required (FRP + edge TLS)"
@@ -52,6 +52,30 @@ print_requirements() {
 
 info() { printf '%s\n' "${_C}→${_R} $*"; }
 ok() { printf '%s\n' "${_G}✓${_R} $*"; }
+
+# Free KiB on the filesystem backing Docker images/volumes. Named chain data volumes live here,
+# not on the project directory. A short-lived container + bind mount reports the engine disk
+# correctly for Docker Desktop and WSL, not only native Linux.
+_docker_engine_avail_kb() {
+    local root kb
+    docker info >/dev/null 2>&1 || return 1
+    root=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null) || return 1
+    [ -n "$root" ] || return 1
+    root="${root%/}"
+    kb=$(docker run --rm -v /:/host:ro alpine:3.20 sh -c "df -Pk '/host${root}' 2>/dev/null | awk 'NR==2{print \$4}'" 2>/dev/null || true)
+    if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+        printf '%s\n' "$kb"
+        return 0
+    fi
+    if [ -e "$root" ]; then
+        kb=$(df -Pk "$root" 2>/dev/null | awk 'NR==2{print $4}')
+        if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+            printf '%s\n' "$kb"
+            return 0
+        fi
+    fi
+    return 1
+}
 
 # Shown in help text (override if you mirror the installer elsewhere)
 FULLNODE_INSTALLER_URL="${FULLNODE_INSTALLER_URL:-https://fullnode.testnet.coti.io}"
@@ -276,23 +300,11 @@ fi
 info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}$([[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && printf ' · %s' "${_B}COTI tunnel (wizard)${_R}")"
 _w ""
 
-# --- 1b. CHECK INSTALL DIRECTORY (writability + disk space) ---
+# --- 1b. CHECK INSTALL DIRECTORY (writability; disk space for chain data is checked after Docker is up) ---
 INSTALL_DIR="$(pwd)"
 if [ ! -w "$INSTALL_DIR" ]; then
     printf '%s\n' "${_Y}ERROR:${_R} Cannot write to current directory ($INSTALL_DIR)."
     _w "Run the installer from a writable directory (for example cd ~)."
-    exit 1
-fi
-
-REQUIRED_KB=$((DISK_SPACE_REQUIRED * 1024 * 1024))
-AVAIL_KB=$(df -P "$INSTALL_DIR" | awk 'NR==2 {print $4}')
-if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
-    if [ -n "$AVAIL_KB" ]; then
-        AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
-        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free in $INSTALL_DIR (about ${AVAIL_GB} GB available)."
-    else
-        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for $INSTALL_DIR."
-    fi
     exit 1
 fi
 
@@ -391,6 +403,33 @@ if docker compose version >/dev/null 2>&1; then
 else
     DC="docker-compose"
 fi
+
+# --- 2b. CHECK DOCKER ENGINE DISK (named volumes for chain data live on the engine filesystem) ---
+if ! docker info >/dev/null 2>&1; then
+    info "Waiting for Docker daemon..."
+    for _i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+        sleep 1
+        docker info >/dev/null 2>&1 && break
+    done
+fi
+if ! docker info >/dev/null 2>&1; then
+    printf '%s\n' "${_Y}ERROR:${_R} Docker daemon is not reachable. Try: systemctl start docker"
+    exit 1
+fi
+
+REQUIRED_KB=$((DISK_SPACE_REQUIRED * 1024 * 1024))
+DOCKER_ROOT=$(docker info -f '{{.DockerRootDir}}' 2>/dev/null || true)
+AVAIL_KB=$(_docker_engine_avail_kb || true)
+if [ -z "$AVAIL_KB" ] || [ "$AVAIL_KB" -lt "$REQUIRED_KB" ]; then
+    if [ -n "$AVAIL_KB" ]; then
+        AVAIL_GB=$((AVAIL_KB / 1024 / 1024))
+        printf '%s\n' "${_Y}ERROR:${_R} Need at least ${DISK_SPACE_REQUIRED} GB free where Docker stores data (engine root: ${DOCKER_ROOT:-unknown}; about ${AVAIL_GB} GB available)."
+    else
+        printf '%s\n' "${_Y}ERROR:${_R} Could not read free disk space for the Docker engine (DockerRootDir: ${DOCKER_ROOT:-unknown}). Ensure Docker works and outbound image pulls are allowed (uses a short alpine:3.20 run)."
+    fi
+    exit 1
+fi
+ok "Docker engine disk: enough free space for chain data (named volume on ${DOCKER_ROOT:-Docker storage})"
 
 # --- 3. CLONE/PREPARE DIRECTORY ---
 # Require a clean directory: no existing clone (avoids old-version conflicts).
