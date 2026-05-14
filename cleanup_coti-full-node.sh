@@ -24,10 +24,14 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIR="$SCRIPT_DIR"
 DOMAIN=""
-if [ -f "$DIR/.env" ]; then
+if [ -f "$DIR/installer.env" ] || [ -f "$DIR/.env" ]; then
     set -a
-    source "$DIR/.env"
-    source "$DIR/installer.env"
+    # shellcheck source=/dev/null
+    [ -f "$DIR/installer.env" ] && . "$DIR/installer.env"
+    # shellcheck source=/dev/null
+    [ -f "$DIR/.env" ] && . "$DIR/.env"
+    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
+    export DOCKER_FULL_NODE_IMAGE_VERSION
     set +a
     DOMAIN="${FULLNODE_FQDN:-}"
 fi

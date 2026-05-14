@@ -1,7 +1,10 @@
 #!/bin/bash
 
-set -x
-set -v
+# Verbose tracing only when debugging (avoids noisy logs and leaking env in production).
+if [ "${COTI_FULL_NODE_DEBUG:-}" = "1" ]; then
+    set -x
+    set -v
+fi
 
 # Choose compose command: prefer "docker compose" (v2 plugin) when available
 if docker compose version >/dev/null 2>&1; then
@@ -10,15 +13,27 @@ else
     DC="docker-compose"
 fi
 
-# Prefer .env from install_coti-full-node.sh when present; otherwise compute at runtime (legacy behavior)
-if [ -f .env ]; then
+# installer.env = installation defaults (e.g. image tag); .env = this host (FQDN, keys, flags). Host values win on overlap.
+if [ -f installer.env ] || [ -f .env ]; then
     set -a
-    source .env
-    source installer.env
+    # shellcheck source=/dev/null
+    [ -f installer.env ] && . ./installer.env
+    # shellcheck source=/dev/null
+    [ -f .env ] && . ./.env
+    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
+    export DOCKER_FULL_NODE_IMAGE_VERSION
     set +a
 else
-    export FULLNODE_EXT_IP=$(curl -s https://api.ipify.org)
-    export FULLNODE_FQDN=$(dig -x $FULLNODE_EXT_IP +short | head -n 1)
+    if ! FULLNODE_EXT_IP=$(curl -fsS --connect-timeout 10 --max-time 20 https://api.ipify.org); then
+        echo "ERROR: Could not detect public IP (api.ipify.org). Set FULLNODE_EXT_IP or add .env." >&2
+        exit 1
+    fi
+    if [ -z "$FULLNODE_EXT_IP" ]; then
+        echo "ERROR: Public IP lookup returned empty." >&2
+        exit 1
+    fi
+    export FULLNODE_EXT_IP
+    export FULLNODE_FQDN=$(dig -x "$FULLNODE_EXT_IP" +short | head -n 1)
 fi
 
 if [ "${FRPC_ENABLED:-false}" = "true" ]; then

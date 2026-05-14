@@ -31,11 +31,15 @@ if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
     exit 1
 fi
 
-# Load .env for docker-compose
-if [ -f .env ]; then
+# installer.env first (packaging defaults), then .env (this host).
+if [ -f installer.env ] || [ -f .env ]; then
     set -a
-    source .env
-    source installer.env
+    # shellcheck source=/dev/null
+    [ -f installer.env ] && . ./installer.env
+    # shellcheck source=/dev/null
+    [ -f .env ] && . ./.env
+    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
+    export DOCKER_FULL_NODE_IMAGE_VERSION
     set +a
 fi
 
