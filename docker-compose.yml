@@ -1,7 +1,8 @@
 # Chain data uses a named volume so Geth can create geth.ipc (Unix socket). Bind-mounting
 # ./execution from WSL /mnt/c/... fails with "bind: operation not supported" for IPC.
+# Volume name is testnet-specific so a mainnet stack can use a separate volume (e.g. coti-mainnet-execution-data).
 volumes:
-  coti-execution-data:
+  coti-testnet-execution-data:
 
 services:
   # Sets up the genesis configuration for the go-ethereum client from a JSON file.
@@ -10,7 +11,7 @@ services:
     container_name: coti-testnet-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
-      - coti-execution-data:/execution
+      - coti-testnet-execution-data:/execution
     logging:
       driver: "json-file"
       options:
