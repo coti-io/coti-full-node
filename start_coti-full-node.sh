@@ -51,8 +51,14 @@ fi
 echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}) is pulled..."
 $DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG pull
 
+echo "Building operator status dashboard (local image, quick when cached)..."
+$DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG build coti-testnet-operator-dashboard
+
 echo "Starting COTI full node services..."
 $DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG up -d
 
 echo "Node started. Checking liveness..."
 ./liveness_coti-full-node.sh
+
+echo ""
+echo "Operator status page (same machine): http://127.0.0.1:8090"

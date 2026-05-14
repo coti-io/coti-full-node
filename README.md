@@ -44,3 +44,9 @@ The stack can run an FRP client (`frpc`) container that creates an outbound-only
 - Gateway-side routing can forward external requests (for example `https://<node-id>.fullnode.testnet.coti.io/rpc`) through FRPS to your FRPC client, then to the local full-node RPC endpoint.
 
 Relevant environment variables are documented in `.env.example`.
+
+### Operator status page
+
+After `./start_coti-full-node.sh`, a small **local** web dashboard helps non-technical operators see whether the node is running, has peers, is syncing, and (when configured) whether DNS/HTTPS or the FRPC gateway look healthy. On the machine where Docker runs, open [http://127.0.0.1:8090](http://127.0.0.1:8090). It is bound to localhost only and auto-refreshes about every 15 seconds.
+
+If you manage the server over SSH, use port forwarding, for example: `ssh -L 8090:127.0.0.1:8090 user@your-node` then open `http://127.0.0.1:8090` in your desktop browser.

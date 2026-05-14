@@ -68,6 +68,29 @@ services:
         max-size: "50m"
         max-file: "5"
 
+  # Local-only status page for operators (open http://127.0.0.1:8090 on the host).
+  coti-testnet-operator-dashboard:
+    build:
+      context: ./operator-dashboard
+    container_name: coti-testnet-operator-dashboard
+    restart: unless-stopped
+    depends_on:
+      coti-testnet-full-node:
+        condition: service_started
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      LISTEN_PORT: "8090"
+      RPC_URL: http://coti-testnet-full-node:8545
+      FULLNODE_FQDN: ${FULLNODE_FQDN:-}
+      FULLNODE_EXT_IP: ${FULLNODE_EXT_IP:-}
+      NGINX_ENABLED: ${NGINX_ENABLED:-false}
+      FRPC_ENABLED: ${FRPC_ENABLED:-false}
+      FRPC_CUSTOM_DOMAIN: ${FRPC_CUSTOM_DOMAIN:-}
+      FRPS_SERVER_ADDR: ${FRPS_SERVER_ADDR:-}
+      FRPS_SERVER_ADDR_1: ${FRPS_SERVER_ADDR_1:-virginia.fullnode.testnet.coti.io}
+      FRPS_SERVER_PORT: ${FRPS_SERVER_PORT:-7000}
+
   frpc-1:
     image: fatedier/frpc:v0.61.2
     container_name: coti-testnet-frpc-1
