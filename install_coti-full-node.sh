@@ -54,8 +54,9 @@ info() { printf '%s\n' "${_C}→${_R} $*"; }
 ok() { printf '%s\n' "${_G}✓${_R} $*"; }
 
 # Free KiB on the filesystem backing Docker images/volumes. Named chain data volumes live here,
-# not on the project directory. A short-lived container + bind mount reports the engine disk
-# correctly for Docker Desktop and WSL, not only native Linux.
+# not on the project directory. Prefer resolving the Docker root through a host bind mount, then
+# fall back to the container root filesystem for Docker Desktop / WSL setups where DockerRootDir
+# is reported logically but is not visible in the distro filesystem.
 _docker_engine_avail_kb() {
     local root kb
     docker info >/dev/null 2>&1 || return 1
@@ -73,6 +74,11 @@ _docker_engine_avail_kb() {
             printf '%s\n' "$kb"
             return 0
         fi
+    fi
+    kb=$(docker run --rm alpine:3.20 sh -c "df -Pk / 2>/dev/null | awk 'NR==2{print \$4}'" 2>/dev/null || true)
+    if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+        printf '%s\n' "$kb"
+        return 0
     fi
     return 1
 }

@@ -22,7 +22,9 @@ _div() { printf '%s\n' "${_D}─────────────────
 info() { printf '%s\n' "${_C}→${_R} $*"; }
 ok() { printf '%s\n' "${_G}✓${_R} $*"; }
 
-# Free KiB on the filesystem backing Docker images/volumes (named chain data volumes live here).
+# Free KiB on the filesystem backing Docker images/volumes. Prefer resolving the Docker root
+# through a host bind mount, then fall back to the container root filesystem for Docker Desktop
+# setups where DockerRootDir is reported logically but is not exposed on the host path.
 _docker_engine_avail_kb() {
     local root kb
     docker info >/dev/null 2>&1 || return 1
@@ -40,6 +42,11 @@ _docker_engine_avail_kb() {
             printf '%s\n' "$kb"
             return 0
         fi
+    fi
+    kb=$(docker run --rm alpine:3.20 sh -c "df -Pk / 2>/dev/null | awk 'NR==2{print \$4}'" 2>/dev/null || true)
+    if [ -n "$kb" ] && [ "$kb" -ge 1 ] 2>/dev/null; then
+        printf '%s\n' "$kb"
+        return 0
     fi
     return 1
 }
