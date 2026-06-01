@@ -27,11 +27,10 @@ curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x<PRIVATE_KEY>" "<
 | **`--with-frp`** | COTI wizard tunnel: enables FRPC, disables host Nginx/Let’s Encrypt, relaxes inbound 80/443/7400 firewall checks. |
 | **`--with-nginx`** | Your domain: Nginx + Let’s Encrypt on the host (`/rpc`, `/ws`, `/metrics`). |
 | **`--frpc-enabled=true`** | FRPC relay only (no wizard tunnel relaxations). Do not combine with `--with-nginx`. |
-| **`--without-nginx`** | Skip host Nginx (advanced). |
 | **`--staging`** | Let’s Encrypt staging CA (with `--with-nginx` only). |
 | **`--frpc-custom-domain=`**, **`--frpc-auth-token=`**, **`--frps-server-addr-1=`**, etc. | Optional FRPC tuning (see script). |
 
-**FRPC is off by default.** Enable it with **`--with-frp`** or **`--frpc-enabled=true`** only.
+**Nginx/TLS and FRPC are off by default.** Use **`--with-nginx`** or **`--with-frp`** / **`--frpc-enabled=true`** to enable them (not both Nginx and FRPC on one install).
 
 **macOS:** use `install_coti-full-node-mac.sh` (see script header for `curl` examples).
 

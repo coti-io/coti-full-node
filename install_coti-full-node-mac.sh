@@ -162,9 +162,6 @@ _CLI_FRPC_ENABLE=false
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
-        --without-nginx)
-            NGINX_ENABLED=false
-            ;;
         --with-nginx)
             NGINX_ENABLED=true
             COTI_TUNNEL_INSTALL=false
