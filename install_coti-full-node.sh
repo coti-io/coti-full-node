@@ -173,10 +173,6 @@ for arg in "$@"; do
             COTI_TUNNEL_INSTALL=true
             _CLI_FRPC_ENABLE=true
             ;;
-        --without-frp)
-            FRPC_ENABLED=false
-            COTI_TUNNEL_INSTALL=false
-            ;;
         --frpc-enabled=*)
             FRPC_ENABLED="${arg#*=}"
             if [[ "$FRPC_ENABLED" == "true" ]]; then

@@ -10,7 +10,45 @@ This repository contains the necessary files and scripts to easily set up and ma
 
 ## Documentation
 
-Visit the [Running a COTI Node](https://docs.coti.io/coti-documentation/running-a-coti-node) section of the COTI Documenation for full instructions.
+Visit the [Running a COTI Node](https://docs.coti.io/coti-documentation/running-a-coti-node) section of the COTI Documentation for full instructions. The [node ecosystem installation guides](https://github.com/coti-io/documentation/tree/main/node-ecosystem) describe wizard flows in more detail.
+
+### Automated install (`install_coti-full-node.sh`)
+
+Run as **root** from an **empty** directory (Linux Ubuntu 24.04 LTS, or WSL with a Linux home path — not `/mnt/c/`):
+
+```bash
+curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x<PRIVATE_KEY>" "<FQDN>" [options]
+```
+
+**Required arguments:** 64-character hex private key (optional `0x` prefix) and FQDN hostname.
+
+| Flag | Purpose |
+|------|---------|
+| **`--with-frp`** | COTI wizard tunnel: enables FRPC, disables host Nginx/Let’s Encrypt, relaxes inbound 80/443/7400 firewall checks. |
+| **`--with-nginx`** | Your domain: Nginx + Let’s Encrypt on the host (`/rpc`, `/ws`, `/metrics`). |
+| **`--frpc-enabled=true`** | FRPC relay only (no wizard tunnel relaxations). Do not combine with `--with-nginx`. |
+| **`--without-nginx`** | Skip host Nginx (advanced). |
+| **`--staging`** | Let’s Encrypt staging CA (with `--with-nginx` only). |
+| **`--frpc-custom-domain=`**, **`--frpc-auth-token=`**, **`--frps-server-addr-1=`**, etc. | Optional FRPC tuning (see script). |
+
+**FRPC is off by default.** Enable it with **`--with-frp`** or **`--frpc-enabled=true`** only.
+
+**macOS:** use `install_coti-full-node-mac.sh` (see script header for `curl` examples).
+
+### Configuration files
+
+After install, two env files live in the clone:
+
+| File | Purpose |
+|------|---------|
+| **`installer.env`** | Installation / packaging defaults: `DOCKER_FULL_NODE_IMAGE_VERSION`, `NETWORK`, `CLONE_BRANCH`, disk requirement. |
+| **`.env`** | This host: `FULLNODE_FQDN`, `FULLNODE_EXT_IP`, `NGINX_ENABLED`, `FRPC_ENABLED`, FRPS hosts, keys. |
+
+`start_coti-full-node.sh` and `stop_coti-full-node.sh` load **`installer.env` first**, then **`.env`** (host values win on overlap).
+
+**Upgrade the node image:** edit `DOCKER_FULL_NODE_IMAGE_VERSION` or set `IMAGE=` in `installer.env`, then `./stop_coti-full-node.sh` and `./start_coti-full-node.sh`.
+
+Per-variable reference: [`.env.example`](.env.example) and [`installer.env`](installer.env) (template beside the install script before clone).
 
 ### **Updating to the latest version**
 
@@ -23,27 +61,28 @@ To update your node to the latest version, follow these steps:
 2.  **Checkout the Tag**: Ensure you are on the correct version by checking out the new tag.
     `git checkout tags/v1.1.4-testnet`
 
-3.  **Stop Old Containers**: Stop the existing containers by running the stop script.
+3.  **Bump image tag** (if needed): set `DOCKER_FULL_NODE_IMAGE_VERSION` or `IMAGE` in `installer.env`.
+
+4.  **Stop Old Containers**: Stop the existing containers by running the stop script.
     `./stop_coti-full-node.sh`
 
-4.  **Start New Containers**: Start the new containers with the updated Docker Compose file.
+5.  **Start New Containers**: Start the new containers with the updated Docker Compose file.
     `./start_coti-full-node.sh`
 
 ### Reporting Issues
 
 If you encounter any bugs or issues, please report them by [opening an issue](https://github.com/coti-io/coti-full-node/issues/new) on GitHub. Include as much detail as possible, including steps to reproduce the bug, the environment you encountered it in, and any other relevant information.
 
-### FRPC RPC Relay (Testnet Gateway)
+### FRPC RPC relay (testnet gateway)
 
-The stack can run an FRP client (`frpc`) container that creates an outbound-only tunnel from your node to `gateway.fullnode.testnet.coti.io:7000`.
+Enable with **`--with-frp`** (wizard tunnel) or **`--frpc-enabled=true`**. The stack runs two `frpc` containers (regional gateways; defaults in `.env.example`).
 
-- FRPC is used only for JSON-RPC relay to the node RPC service on port `8545`.
-- P2P sync and peer connectivity still use the normal full-node bootnodes and port `7400`.
-- You do not need inbound RPC ports on your home PC for this relay mode.
-- Required outbound connectivity for relay is `gateway.fullnode.testnet.coti.io:7000`.
-- Gateway-side routing can forward external requests (for example `https://<node-id>.fullnode.testnet.coti.io/rpc`) through FRPS to your FRPC client, then to the local full-node RPC endpoint.
+- **Outbound-only** tunnel to FRPS (`FRPS_SERVER_ADDR_1` / `_2`, port `7000` by default).
+- Edge paths on your `FRPC_CUSTOM_DOMAIN`: **`/rpc`** → JSON-RPC (8545), **`/ws`** → WebSocket (8546), **`/operator/`** → local operator dashboard.
+- P2P still uses bootnodes and host port **7400**; wizard tunnel mode does not require inbound 80/443/7400 from the internet.
+- Host Nginx and FRPC are **mutually exclusive** on the same install.
 
-Relevant environment variables are documented in `.env.example`.
+Relevant variables: `.env.example`. FRPC is off by default; use **`--with-frp`** or **`--frpc-enabled=true`** to enable it.
 
 ### Operator status page
 
