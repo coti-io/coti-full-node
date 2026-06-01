@@ -144,6 +144,8 @@ fi
 FRPS_SERVER_ADDR_1_EXPLICIT=false
 FRPS_SERVER_ADDR_2_EXPLICIT=false
 COTI_TUNNEL_INSTALL=false
+_CLI_NGINX_ENABLE=false
+_CLI_FRPC_ENABLE=false
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
@@ -153,11 +155,13 @@ for arg in "$@"; do
         --with-nginx)
             NGINX_ENABLED=true
             COTI_TUNNEL_INSTALL=false
+            _CLI_NGINX_ENABLE=true
             ;;
         --nginx-enabled=*)
             NGINX_ENABLED="${arg#*=}"
             if [[ "$NGINX_ENABLED" == "true" ]]; then
                 COTI_TUNNEL_INSTALL=false
+                _CLI_NGINX_ENABLE=true
             fi
             ;;
         --staging)
@@ -167,6 +171,7 @@ for arg in "$@"; do
             FRPC_ENABLED=true
             NGINX_ENABLED=false
             COTI_TUNNEL_INSTALL=true
+            _CLI_FRPC_ENABLE=true
             ;;
         --without-frp)
             FRPC_ENABLED=false
@@ -174,7 +179,9 @@ for arg in "$@"; do
             ;;
         --frpc-enabled=*)
             FRPC_ENABLED="${arg#*=}"
-            if [[ "$FRPC_ENABLED" != "true" ]]; then
+            if [[ "$FRPC_ENABLED" == "true" ]]; then
+                _CLI_FRPC_ENABLE=true
+            else
                 COTI_TUNNEL_INSTALL=false
             fi
             ;;
@@ -206,6 +213,21 @@ done
 
 PK="${POSITIONAL[0]:-}"
 FQDN="${POSITIONAL[1]:-}"
+
+if [[ "$_CLI_NGINX_ENABLE" == "true" && "$_CLI_FRPC_ENABLE" == "true" ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Cannot combine host Nginx/SSL with FRPC on the same install."
+    _w "  • Host TLS (Let's Encrypt on this machine): ${_U}--with-nginx${_R} only"
+    _w "  • COTI wizard tunnel (FRP, no host Nginx): ${_U}--with-frp${_R} only"
+    _w "  • FRPC relay without host Nginx: ${_U}--frpc-enabled=true${_R} (not with ${_U}--with-nginx${_R})"
+    exit 1
+fi
+
+if [[ "$NGINX_ENABLED" == "true" && "$FRPC_ENABLED" == "true" ]]; then
+    printf '%s\n' "${_Y}ERROR:${_R} Nginx/SSL and FRPC cannot both be enabled."
+    _w "  • Use only one: ${_U}--with-nginx${_R} (host TLS) or ${_U}--with-frp${_R} / ${_U}--frpc-enabled=true${_R} (FRPC)."
+    _w "  • If both are set via environment or installer.env, unset one before running."
+    exit 1
+fi
 
 if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" != "true" ]]; then
     printf '%s\n' "${_Y}ERROR:${_R} COTI tunnel install requires FRPC enabled (use ${_U}--with-frp${_R})."
