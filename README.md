@@ -26,11 +26,10 @@ curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x<PRIVATE_KEY>" "<
 |------|---------|
 | **`--with-frp`** | COTI wizard tunnel: enables FRPC, disables host Nginx/Let’s Encrypt, relaxes inbound 80/443/7400 firewall checks. |
 | **`--with-nginx`** | Your domain: Nginx + Let’s Encrypt on the host (`/rpc`, `/ws`, `/metrics`). |
-| **`--frpc-enabled=true`** | FRPC relay only (no wizard tunnel relaxations). Do not combine with `--with-nginx`. |
 | **`--staging`** | Let’s Encrypt staging CA (with `--with-nginx` only). |
 | **`--frpc-custom-domain=`**, **`--frpc-auth-token=`**, **`--frps-server-addr-1=`**, etc. | Optional FRPC tuning (see script). |
 
-**Nginx/TLS and FRPC are off by default.** Use **`--with-nginx`** or **`--with-frp`** / **`--frpc-enabled=true`** to enable them (not both Nginx and FRPC on one install).
+**Nginx/TLS and FRPC are off by default.** Use **`--with-nginx`** or **`--with-frp`** to enable them (not both on one install).
 
 **macOS:** use `install_coti-full-node-mac.sh` (see script header for `curl` examples).
 
@@ -74,14 +73,14 @@ If you encounter any bugs or issues, please report them by [opening an issue](ht
 
 ### FRPC RPC relay (testnet gateway)
 
-Enable with **`--with-frp`** (wizard tunnel) or **`--frpc-enabled=true`**. The stack runs two `frpc` containers (regional gateways; defaults in `.env.example`).
+Enable with **`--with-frp`** (wizard tunnel). The stack runs two `frpc` containers (regional gateways; defaults in `.env.example`).
 
 - **Outbound-only** tunnel to FRPS (`FRPS_SERVER_ADDR_1` / `_2`, port `7000` by default).
 - Edge paths on your `FRPC_CUSTOM_DOMAIN`: **`/rpc`** → JSON-RPC (8545), **`/ws`** → WebSocket (8546), **`/operator/`** → local operator dashboard.
 - P2P still uses bootnodes and host port **7400**; wizard tunnel mode does not require inbound 80/443/7400 from the internet.
 - Host Nginx and FRPC are **mutually exclusive** on the same install.
 
-Relevant variables: `.env.example`. FRPC is off by default; use **`--with-frp`** or **`--frpc-enabled=true`** to enable it.
+Relevant variables: `.env.example`. FRPC is off by default; use **`--with-frp`** to enable it.
 
 ### Operator status page
 

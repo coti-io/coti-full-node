@@ -66,7 +66,7 @@ print_welcome() {
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
     _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; ${_U}--with-nginx${_R})"
-    _w "  7. Optional: FRPC (${_Y}off by default${_R}; ${_U}--with-frp${_R} / ${_U}--frpc-enabled=true${_R})"
+    _w "  7. Optional: FRPC / COTI wizard tunnel (${_Y}off by default${_R}; ${_U}--with-frp${_R})"
     _w "  8. Start the stack"
     _w ""
     _div
@@ -167,13 +167,6 @@ for arg in "$@"; do
             COTI_TUNNEL_INSTALL=false
             _CLI_NGINX_ENABLE=true
             ;;
-        --nginx-enabled=*)
-            NGINX_ENABLED="${arg#*=}"
-            if [[ "$NGINX_ENABLED" == "true" ]]; then
-                COTI_TUNNEL_INSTALL=false
-                _CLI_NGINX_ENABLE=true
-            fi
-            ;;
         --staging)
             CERTBOT_STAGING=true
             ;;
@@ -182,14 +175,6 @@ for arg in "$@"; do
             NGINX_ENABLED=false
             COTI_TUNNEL_INSTALL=true
             _CLI_FRPC_ENABLE=true
-            ;;
-        --frpc-enabled=*)
-            FRPC_ENABLED="${arg#*=}"
-            if [[ "$FRPC_ENABLED" == "true" ]]; then
-                _CLI_FRPC_ENABLE=true
-            else
-                COTI_TUNNEL_INSTALL=false
-            fi
             ;;
         --frpc-custom-domain=*)
             FRPC_CUSTOM_DOMAIN="${arg#*=}"
@@ -224,13 +209,12 @@ if [[ "$_CLI_NGINX_ENABLE" == "true" && "$_CLI_FRPC_ENABLE" == "true" ]]; then
     printf '%s\n' "${_Y}ERROR:${_R} Cannot combine host Nginx/SSL with FRPC on the same install."
     _w "  • Host TLS (Let's Encrypt on this machine): ${_U}--with-nginx${_R} only"
     _w "  • COTI wizard tunnel (FRP, no host Nginx): ${_U}--with-frp${_R} only"
-    _w "  • FRPC relay without host Nginx: ${_U}--frpc-enabled=true${_R} (not with ${_U}--with-nginx${_R})"
     exit 1
 fi
 
 if [[ "$NGINX_ENABLED" == "true" && "$FRPC_ENABLED" == "true" ]]; then
     printf '%s\n' "${_Y}ERROR:${_R} Nginx/SSL and FRPC cannot both be enabled."
-    _w "  • Use only one: ${_U}--with-nginx${_R} (host TLS) or ${_U}--with-frp${_R} / ${_U}--frpc-enabled=true${_R} (FRPC)."
+    _w "  • Use only one: ${_U}--with-nginx${_R} (host TLS) or ${_U}--with-frp${_R} (COTI tunnel)."
     _w "  • If both are set via environment or installer.env, unset one before running."
     exit 1
 fi
@@ -634,7 +618,7 @@ if [[ "$FRPC_ENABLED" == "true" ]]; then
         _w "  • Inbound firewall: ${_B}not required${_R} for 80/443/7400 from the internet (outbound FRP + local P2P)"
     fi
 else
-    _w "  • FRPC: ${_D}disabled${_R} (wizard tunnel: ${_U}--with-frp${_R}; relay only: ${_U}--frpc-enabled=true${_R})"
+    _w "  • FRPC: ${_D}disabled${_R} (enable with ${_U}--with-frp${_R})"
 fi
 _w "  • Logs: ${_U}docker logs -f coti-$NETWORK-full-node${_R}"
 if [[ "$NGINX_ENABLED" == "true" ]]; then
