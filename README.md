@@ -14,10 +14,18 @@ Visit the [Running a COTI Node](https://docs.coti.io/coti-documentation/running-
 
 ### Automated install (`install_coti-full-node.sh`)
 
-Run as **root** from an **empty** directory (Linux Ubuntu 24.04 LTS, or WSL with a Linux home path — not `/mnt/c/`):
+Run from an **empty** directory. Set `<network>` to `testnet` or `mainnet`.
+
+**Linux / WSL** (Ubuntu 24.04 LTS, or WSL with a Linux home path — not `/mnt/c/`) — as **root**:
 
 ```bash
-curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x<PRIVATE_KEY>" "<FQDN>" [options]
+curl -sL https://fullnode.<network>.coti.io/install-linux | sudo bash -s -- "0x<PRIVATE_KEY>" "<FQDN>" [options]
+```
+
+**macOS** — do not use `sudo`:
+
+```bash
+curl -sL https://fullnode.<network>.coti.io/install-mac | bash -s -- "0x<PRIVATE_KEY>" "<FQDN>" [options]
 ```
 
 **Required arguments:** 64-character hex private key (optional `0x` prefix) and FQDN hostname.

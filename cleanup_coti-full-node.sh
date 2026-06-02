@@ -72,5 +72,5 @@ fi
 echo ""
 echo "Done. Run install_coti-full-node.sh again to test from scratch."
 echo "Example (Linux / macOS / Windows WSL on Ubuntu 24.04):"
-echo '  curl -sL https://fullnode.testnet.coti.io | sudo bash -s -- "0x..." "your.domain"'
+echo '  curl -sL https://fullnode.<network>.coti.io/install-linux | sudo bash -s -- "0x..." "your.domain"'
 echo "On WSL, install from ~/... not /mnt/c/... (Docker + Geth IPC need a Linux filesystem path)."
