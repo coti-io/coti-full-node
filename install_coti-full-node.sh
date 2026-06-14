@@ -377,10 +377,18 @@ fi
 
 # Detect necessary system dependencies
 PKGS="curl git jq dnsutils"
+COMPOSE_PKG=""
 if [[ "$DOCKER_PRESENT" == "true" ]]; then
     info "Docker already present — skipping docker.io (avoids containerd.io conflict)"
+    if ! docker compose version >/dev/null 2>&1; then
+        if dpkg -s containerd.io >/dev/null 2>&1 || dpkg -s docker-ce-cli >/dev/null 2>&1; then
+            COMPOSE_PKG="docker-compose-plugin"
+        else
+            COMPOSE_PKG="docker-compose-v2"
+        fi
+    fi
 else
-    PKGS="docker.io docker-compose $PKGS"
+    PKGS="docker.io docker-compose-v2 $PKGS"
 fi
 
 if [[ "$NGINX_ENABLED" == "true" ]]; then
@@ -388,13 +396,19 @@ if [[ "$NGINX_ENABLED" == "true" ]]; then
 fi
 
 # Install necessary system dependencies
-apt-get install -y --no-install-recommends $PKGS
+if [ -n "$COMPOSE_PKG" ]; then
+    apt-get install -y --no-install-recommends $PKGS $COMPOSE_PKG
+else
+    apt-get install -y --no-install-recommends $PKGS
+fi
 
-# Set the compose command
+# Require Compose v2 (docker compose); legacy docker-compose v1 is not supported.
 if docker compose version >/dev/null 2>&1; then
     DC="docker compose"
 else
-    DC="docker-compose"
+    printf '%s\n' "${_Y}ERROR:${_R} \`docker compose\` (Compose v2 plugin) is not available."
+    _w "Install docker-compose-v2 (Ubuntu docker.io) or docker-compose-plugin (Docker CE), then re-run."
+    exit 1
 fi
 
 # --- 2b. CHECK DOCKER ENGINE DISK (named volumes for chain data live on the engine filesystem) ---

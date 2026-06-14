@@ -6,12 +6,13 @@ if [ "${COTI_FULL_NODE_DEBUG:-}" = "1" ]; then
     set -v
 fi
 
-# Choose compose command: prefer "docker compose" (v2 plugin) when available
-if docker compose version >/dev/null 2>&1; then
-    DC="docker compose"
-else
-    DC="docker-compose"
+# Require Compose v2 (docker compose); legacy docker-compose v1 is not supported.
+if ! docker compose version >/dev/null 2>&1; then
+    echo "ERROR: \`docker compose\` (Compose v2 plugin) is required."
+    echo "Install docker-compose-v2 (Ubuntu docker.io) or docker-compose-plugin (Docker CE)."
+    exit 1
 fi
+DC="docker compose"
 
 # installer.env = installation defaults (e.g. image tag); .env = this host (FQDN, keys, flags). Host values win on overlap.
 if [ -f installer.env ] || [ -f .env ]; then

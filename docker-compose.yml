@@ -125,7 +125,7 @@ services:
     volumes:
       - ./frpc-2.toml:/etc/frp/frpc.toml:ro
 
-  # Temporary Nginx for SSL setup only (Certbot ACME challenge). Use: docker-compose --profile setup up -d nginx-init
+  # Temporary Nginx for SSL setup only (Certbot ACME challenge). Use: docker compose --profile setup up -d nginx-init
   nginx-init:
     image: nginx:1.15-alpine
     container_name: nginx-init

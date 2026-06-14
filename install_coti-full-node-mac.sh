@@ -344,11 +344,9 @@ ok "Docker engine disk: enough free space for chain data (named volume on ${DOCK
 
 if docker compose version >/dev/null 2>&1; then
     DC="docker compose"
-elif command -v docker-compose >/dev/null 2>&1; then
-    DC="docker-compose"
 else
-    printf '%s\n' "${_Y}ERROR:${_R} Neither \`docker compose\` nor \`docker-compose\` is available."
-    _w "Update Docker Desktop or install the Compose plugin / standalone docker-compose."
+    printf '%s\n' "${_Y}ERROR:${_R} \`docker compose\` (Compose v2 plugin) is not available."
+    _w "Update Docker Desktop or Colima so \`docker compose\` works, then re-run."
     exit 1
 fi
 
