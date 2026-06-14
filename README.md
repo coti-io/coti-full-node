@@ -32,8 +32,8 @@ curl -sL https://fullnode.<network>.coti.io/install-mac | bash -s -- "0x<PRIVATE
 
 | Flag | Purpose |
 |------|---------|
-| **`--with-frp`** | COTI wizard tunnel: enables FRPC, disables host Nginx/Let’s Encrypt, relaxes inbound 80/443/7400 firewall checks. |
-| **`--with-nginx`** | Your domain: Nginx + Let’s Encrypt on the host (`/rpc`, `/ws`, `/metrics`). |
+| **`--with-frp`** | COTI wizard tunnel: enables FRPC + internal Nginx path gateway (no host TLS/certs), relaxes inbound 80/443/7400 firewall checks. |
+| **`--with-nginx`** | Your domain: Nginx + Let’s Encrypt on the host (`/rpc`, `/ws`, `/metrics`, `/operator/`). |
 | **`--staging`** | Let’s Encrypt staging CA (with `--with-nginx` only). |
 | **`--frpc-custom-domain=`**, **`--frpc-auth-token=`**, **`--frps-server-addr-1=`**, etc. | Optional FRPC tuning (see script). |
 
@@ -81,12 +81,13 @@ If you encounter any bugs or issues, please report them by [opening an issue](ht
 
 ### FRPC RPC relay (testnet gateway)
 
-Enable with **`--with-frp`** (wizard tunnel). The stack runs two `frpc` containers (regional gateways; defaults in `.env.example`).
+Enable with **`--with-frp`** (wizard tunnel). The stack runs an **internal Nginx gateway** (Docker-only, HTTP, no certificates) plus two `frpc` containers (regional gateways; defaults in `.env.example`).
 
 - **Outbound-only** tunnel to FRPS (`FRPS_SERVER_ADDR_1` / `_2`, port `7000` by default).
-- Edge paths on your `FRPC_CUSTOM_DOMAIN`: **`/rpc`** → JSON-RPC (8545), **`/ws`** → WebSocket (8546), **`/operator/`** → local operator dashboard.
+- Traffic path: COTI edge → **frpc** → **internal Nginx** → full node / operator dashboard.
+- Edge paths on your `FRPC_CUSTOM_DOMAIN`: **`/rpc`** → JSON-RPC, **`/ws`** → WebSocket, **`/metrics`** → Prometheus metrics, **`/operator/`** → local operator dashboard.
 - P2P still uses bootnodes and host port **7400**; wizard tunnel mode does not require inbound 80/443/7400 from the internet.
-- Host Nginx and FRPC are **mutually exclusive** on the same install.
+- Host TLS Nginx (`--with-nginx`) and FRPC are **mutually exclusive** on the same install.
 
 Relevant variables: `.env.example`. FRPC is off by default; use **`--with-frp`** to enable it.
 

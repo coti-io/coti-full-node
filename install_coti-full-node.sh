@@ -30,7 +30,7 @@ print_welcome() {
     _w "  4. Clone repository and prepare directory"
     _w "  5. Generate .env and node identity"
     _w "  6. Optional: Nginx + Let's Encrypt (${_Y}off by default${_R}; use ${_U}--with-nginx${_R})"
-    _w "  7. Optional: FRPC / COTI wizard tunnel (${_Y}off by default${_R}; use ${_U}--with-frp${_R})"
+    _w "  7. Optional: FRPC / COTI wizard tunnel + internal Nginx gateway (${_Y}off by default${_R}; use ${_U}--with-frp${_R}; no host TLS/certs)"
     _w "  8. Start the stack"
     _w ""
     _div
@@ -44,7 +44,7 @@ print_requirements() {
     _w "  • Free disk: ${DISK_SPACE_REQUIRED} GB where Docker stores images/volumes (chain data uses a named volume, not the project folder)"
     _w "  • Port 7400 must be free locally for the node container (P2P)"
     _w "  • ${_B}With Nginx/SSL:${_R} ports 80 and 443 free; firewall allows 80/443/7400"
-    _w "  • ${_B}With --with-frp${_R} (COTI wizard tunnel): no Nginx on host; inbound 80/443/7400 on the ${_U}firewall${_R} not required (FRP + edge TLS)"
+    _w "  • ${_B}With --with-frp${_R} (COTI wizard tunnel): internal Nginx for path rewrite (no host TLS/certs); inbound 80/443/7400 on the ${_U}firewall${_R} not required (FRP + edge TLS)"
     _w "  • Without Nginx and without FRPC: RPC/WS on local ports (see success message)"
     _w ""
     _div
@@ -496,8 +496,65 @@ info "Writing node key..."
 # Ethereum/Geth based clients read the nodekey from a file
 echo -n "$PK_CLEAN" > ./nodekey
 
-# --- 5b. CONFIGURE FRPC (RPC RELAY ONLY) ---
+# --- 5b. CONFIGURE FRPC + INTERNAL NGINX GATEWAY (no host TLS) ---
 if [[ "$FRPC_ENABLED" == "true" ]]; then
+    info "Writing internal FRPC Nginx gateway config..."
+    mkdir -p ./nginx
+    cat <<EOF > ./nginx/frpc-gateway.conf
+
+upstream fullnode_8545 {
+    server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
+}
+
+upstream fullnode_8546 {
+    server coti-$NETWORK-full-node:8546  max_fails=3 fail_timeout=30s;
+}
+
+upstream fullnode_6000 {
+    server coti-$NETWORK-full-node:6000  max_fails=3 fail_timeout=30s;
+}
+
+upstream operator_dashboard_8090 {
+    server coti-$NETWORK-operator-dashboard:8090  max_fails=3 fail_timeout=30s;
+}
+
+server {
+    listen 8080;
+    server_name _;
+
+    location /ws {
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$http_host;
+        proxy_pass http://fullnode_8546/;
+    }
+
+    location /rpc {
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_pass http://fullnode_8545/;
+    }
+
+    location /metrics {
+        proxy_set_header Host \$host;
+        proxy_pass http://fullnode_6000/debug/metrics/prometheus;
+    }
+
+    location = /operator {
+        return 301 /operator/;
+    }
+
+    location /operator/ {
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_pass http://operator_dashboard_8090/;
+    }
+}
+EOF
+
     FRPC_AUTH_BLOCK=""
     if [ -n "$FRPC_AUTH_TOKEN" ]; then
         FRPC_AUTH_BLOCK=$(cat <<EOF
@@ -518,28 +575,11 @@ serverPort = $FRPS_SERVER_PORT
 $FRPC_AUTH_BLOCK
 
 [[proxies]]
-name = "$FRPC_CUSTOM_DOMAIN-rpc"
+name = "$FRPC_CUSTOM_DOMAIN"
 type = "http"
-localIP = "coti-${NETWORK}-full-node"
-localPort = 8545
+localIP = "nginx-frpc-gateway"
+localPort = 8080
 customDomains = ["$FRPC_CUSTOM_DOMAIN"]
-locations = ["/rpc"]
-
-[[proxies]]
-name = "$FRPC_CUSTOM_DOMAIN-ws"
-type = "http"
-localIP = "coti-${NETWORK}-full-node"
-localPort = 8546
-customDomains = ["$FRPC_CUSTOM_DOMAIN"]
-locations = ["/ws"]
-
-[[proxies]]
-name = "$FRPC_CUSTOM_DOMAIN-operator"
-type = "http"
-localIP = "coti-${NETWORK}-operator-dashboard"
-localPort = 8090
-customDomains = ["$FRPC_CUSTOM_DOMAIN"]
-locations = ["/operator"]
 EOF
     done
     unset _frpc_toml_pair _frpc_toml_file _frpc_server_addr
@@ -655,7 +695,7 @@ _w ""
 if [[ "$NGINX_ENABLED" != "true" ]]; then
     _w "  • Mode: ${_B}no Nginx/SSL on this host${_R}"
     if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" == "true" ]]; then
-        _w "  • COTI tunnel: JSON-RPC ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}/rpc${_R}, WebSocket ${_U}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}/ws${_R}, operator ${_U}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}/operator/${_R}"
+        _w "  • COTI tunnel: JSON-RPC ${_B}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}/rpc${_R}, WebSocket ${_U}https://${FRPC_CUSTOM_DOMAIN:-$FQDN}/ws${_R}, metrics ${_U}/metrics${_R}, operator ${_U}/operator/${_R}"
     else
         _w "  • RPC / WS: published on host ports 8545 / 8546 (see docker-compose)"
     fi
@@ -664,7 +704,7 @@ else
 fi
 if [[ "$FRPC_ENABLED" == "true" ]]; then
     _w "  • FRPC: ${_B}enabled${_R} — gateways $FRPS_SERVER_ADDR_1:$FRPS_SERVER_PORT, $FRPS_SERVER_ADDR_2:$FRPS_SERVER_PORT"
-    _w "  • FRPC: host ${_B}${FRPC_CUSTOM_DOMAIN}${_R} — ${_U}/rpc${_R} → 8545, ${_U}/ws${_R} → 8546, ${_U}/operator/${_R} → dashboard (frpc: …-rpc, …-ws, …-operator)"
+    _w "  • FRPC: host ${_B}${FRPC_CUSTOM_DOMAIN}${_R} — frpc → internal Nginx → ${_U}/rpc${_R}, ${_U}/ws${_R}, ${_U}/metrics${_R}, ${_U}/operator/${_R}"
     if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]]; then
         _w "  • Inbound firewall: ${_B}not required${_R} for 80/443/7400 from the internet (outbound FRP + local P2P)"
     fi

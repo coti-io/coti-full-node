@@ -2,25 +2,8 @@ serverAddr = "virginia.fullnode.testnet.coti.io"
 serverPort = 7000
 
 [[proxies]]
-name = "replace-me.fullnode.testnet.coti.io-rpc"
+name = "replace-me.fullnode.testnet.coti.io"
 type = "http"
-localIP = "coti-testnet-full-node"
-localPort = 8545
+localIP = "nginx-frpc-gateway"
+localPort = 8080
 customDomains = ["replace-me.fullnode.testnet.coti.io"]
-locations = ["/rpc"]
-
-[[proxies]]
-name = "replace-me.fullnode.testnet.coti.io-ws"
-type = "http"
-localIP = "coti-testnet-full-node"
-localPort = 8546
-customDomains = ["replace-me.fullnode.testnet.coti.io"]
-locations = ["/ws"]
-
-[[proxies]]
-name = "replace-me.fullnode.testnet.coti.io-operator"
-type = "http"
-localIP = "coti-testnet-operator-dashboard"
-localPort = 8090
-customDomains = ["replace-me.fullnode.testnet.coti.io"]
-locations = ["/operator"]
