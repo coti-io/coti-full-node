@@ -43,7 +43,6 @@ services:
       - --ws.port=8546
       - --ws.addr=0.0.0.0
       - --ws.origins=*
-      - --ws.vhosts=*
       - --ws.api=web3,eth
       - --metrics
       - --metrics.expensive
