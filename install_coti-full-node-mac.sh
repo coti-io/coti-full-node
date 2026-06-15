@@ -439,6 +439,11 @@ if [[ "$FRPC_ENABLED" == "true" ]]; then
     mkdir -p ./nginx
     cat <<EOF > ./nginx/frpc-gateway.conf
 
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 upstream fullnode_8545 {
     server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
 }
@@ -462,8 +467,10 @@ server {
     location /ws {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$http_host;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
         proxy_pass http://fullnode_8546/;
     }
 
@@ -560,6 +567,11 @@ if [[ "$NGINX_ENABLED" == "true" ]]; then
     info "Writing Nginx TLS proxy config..."
     cat <<EOF > ./nginx/sites-enabled/fullnode.conf
 
+map \$http_upgrade \$connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 upstream fullnode_8545 {
     server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
 }
@@ -590,9 +602,11 @@ server {
     location /ws {
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$http_host;
-        proxy_pass http://fullnode_8546/;
+        proxy_set_header Connection \$connection_upgrade;
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_pass http://fullnode_8546/; 
     }
 
     location /rpc {
