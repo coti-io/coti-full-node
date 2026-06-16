@@ -86,14 +86,28 @@ print_install_curl_examples() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+INSTALLER_REPO_RAW="${INSTALLER_REPO_RAW:-https://raw.githubusercontent.com/coti-io/coti-full-node/main}"
+
+if [ -f "${SCRIPT_DIR}/scripts/source-installer-helper.sh" ]; then
+    # shellcheck source=scripts/source-installer-helper.sh
+    . "${SCRIPT_DIR}/scripts/source-installer-helper.sh"
+else
+    _installer_helper_tmp="$(mktemp)"
+    if ! curl -fsSL "${INSTALLER_REPO_RAW}/scripts/source-installer-helper.sh" -o "$_installer_helper_tmp"; then
+        rm -f "$_installer_helper_tmp"
+        printf '%s\n' "ERROR: Could not bootstrap installer helpers from ${INSTALLER_REPO_RAW}." >&2
+        exit 1
+    fi
+    # shellcheck source=/dev/null
+    . "$_installer_helper_tmp"
+    rm -f "$_installer_helper_tmp"
+fi
 
 # Network: required --testnet/--mainnet for local runs; auto-detect for piped curl installs.
-# shellcheck source=scripts/resolve-network.sh
-. "$SCRIPT_DIR/scripts/resolve-network.sh"
+_source_installer_helper resolve-network.sh || exit 1
 resolve_network "${BASH_SOURCE[0]:-$0}" "$@" || exit 1
 
-# shellcheck source=scripts/load-network.sh
-. "$SCRIPT_DIR/scripts/load-network.sh"
+_source_installer_helper load-network.sh || exit 1
 load_network_profile "$NETWORK" "$SCRIPT_DIR"
 
 # Shown in help text (override in network profile)
