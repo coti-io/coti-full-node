@@ -118,16 +118,11 @@ _w ""
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 
-# Network selection via --testnet / --mainnet (default: testnet).
-for _net_arg in "$@"; do
-    case "$_net_arg" in
-        --testnet) NETWORK=testnet ;;
-        --mainnet) NETWORK=mainnet ;;
-    esac
-done
-unset _net_arg
+# Network: required --testnet/--mainnet for local runs; auto-detect for piped curl installs.
+# shellcheck source=scripts/resolve-network.sh
+. "$SCRIPT_DIR/scripts/resolve-network.sh"
+resolve_network "${BASH_SOURCE[0]:-$0}" "$@" || exit 1
 
-: "${NETWORK:=testnet}"
 # shellcheck source=scripts/load-network.sh
 . "$SCRIPT_DIR/scripts/load-network.sh"
 load_network_profile "$NETWORK" "$SCRIPT_DIR"
@@ -253,7 +248,8 @@ if [ -z "$FQDN" ] || [ -z "$PK" ]; then
     _w ""
     print_install_curl_examples
     _w ""
-    _w "Network: --testnet (default) or --mainnet"
+    _w "Network (local run): --testnet or --mainnet (required)"
+    _w "Network (curl install): inferred from FQDN, or pass --testnet / --mainnet"
     _w "With Nginx + Let's Encrypt: append ${_U}--with-nginx${_R}"
     _w "Wizard tunnel: ${_U}--with-frp${_R}"
     exit 1
@@ -292,7 +288,7 @@ if [[ ! "$FRPS_SERVER_PORT" =~ ^[0-9]+$ ]] || [ "$FRPS_SERVER_PORT" -lt 1 ] || [
     exit 1
 fi
 
-info "Install mode: Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}$([[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && printf ' · %s' "${_B}COTI tunnel (wizard)${_R}")"
+info "Install mode: network ${_B}${NETWORK}${_R} (${NETWORK_SOURCE}) · Nginx/SSL ${_B}${NGINX_ENABLED}${_R} · FRPC relay ${_B}${FRPC_ENABLED}${_R}$([[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && printf ' · %s' "${_B}COTI tunnel (wizard)${_R}")"
 _w ""
 
 INSTALL_DIR="$(pwd)"
