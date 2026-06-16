@@ -465,14 +465,13 @@ server {
     server_name _;
 
     location /ws {
+        proxy_pass http://fullnode_8546/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        # Node WS accepts localhost vhost only; public Host from the tunnel would be rejected.
-        proxy_set_header Host localhost;
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-        proxy_pass http://fullnode_8546/;
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 
     location /rpc {
@@ -601,14 +600,13 @@ server {
     ssl_prefer_server_ciphers on;
 
     location /ws {
+        proxy_pass http://fullnode_8546/;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection \$connection_upgrade;
-        # Node WS accepts localhost vhost only; public Host from the tunnel would be rejected.
-        proxy_set_header Host localhost;
-        proxy_read_timeout 86400s;
-        proxy_send_timeout 86400s;
-        proxy_pass http://fullnode_8546/; 
+        proxy_set_header Host \$host;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
     }
 
     location /rpc {
