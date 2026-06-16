@@ -88,10 +88,12 @@ print_requirements() {
 }
 
 print_install_curl_examples() {
+    local url="https://fullnode.<network>.coti.io/install-mac"
+    if declare -f installer_entrypoint_url >/dev/null 2>&1; then
+        url="$(installer_entrypoint_url mac)"
+    fi
     _w "macOS:"
-    _w "  curl -sL ${FULLNODE_INSTALLER_MAC_URL} | bash -s -- \"0x...\" \"your.domain\" [--testnet|--mainnet] [options]"
-    _w ""
-    _w "Default URL constant (override when mirroring): ${FULLNODE_INSTALLER_MAC_URL}"
+    _w "  curl -sL ${url} | bash -s -- \"0x...\" \"your.domain\" [--testnet|--mainnet] [options]"
 }
 
 # --- 0a. OS: Darwin only ---
@@ -141,8 +143,7 @@ resolve_network "${BASH_SOURCE[0]:-$0}" "$@" || exit 1
 _source_installer_helper load-network.sh || exit 1
 load_network_profile "$NETWORK" "$SCRIPT_DIR"
 
-FULLNODE_INSTALLER_MAC_URL="${FULLNODE_INSTALLER_MAC_URL:-https://raw.githubusercontent.com/coti-io/coti-full-node/main/install_coti-full-node-mac.sh}"
-FQDN_EXAMPLE="${FQDN_EXAMPLE:-node1.fullnode.testnet.coti.io}"
+FQDN_EXAMPLE="${FQDN_EXAMPLE:-node1.fullnode.${NETWORK}.coti.io}"
 
 print_requirements
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true

@@ -32,19 +32,6 @@ resolve_network() {
         return 1
     fi
 
-    case "${FULLNODE_INSTALLER_URL:-}" in
-        *fullnode.mainnet*|*mainnet.coti.io*)
-            NETWORK=mainnet
-            NETWORK_SOURCE="FULLNODE_INSTALLER_URL"
-            return 0
-            ;;
-        *fullnode.testnet*|*testnet.coti.io*)
-            NETWORK=testnet
-            NETWORK_SOURCE="FULLNODE_INSTALLER_URL"
-            return 0
-            ;;
-    esac
-
     fqdn=""
     for arg in "$@"; do
         case "$arg" in

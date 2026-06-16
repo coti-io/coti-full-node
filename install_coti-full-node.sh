@@ -78,8 +78,12 @@ _docker_engine_avail_kb() {
 }
 
 print_install_curl_examples() {
+    local url="https://fullnode.<network>.coti.io/install-linux"
+    if declare -f installer_entrypoint_url >/dev/null 2>&1; then
+        url="$(installer_entrypoint_url linux)"
+    fi
     _w "Linux, macOS, or Windows WSL (Ubuntu 24.04):"
-    _w "  curl -sL ${FULLNODE_INSTALLER_URL} | sudo bash -s -- \"0x...\" \"your.domain\""
+    _w "  curl -sL ${url} | sudo bash -s -- \"0x...\" \"your.domain\" [options]"
     _w ""
     _w "On WSL, run from a directory under your Linux home (e.g. ~/coti), not under /mnt/c/, so Docker can create Unix sockets for the node."
     _w "Native Windows is not supported for this installer; use WSL (Ubuntu 24.04) or a Linux host."
@@ -110,9 +114,7 @@ resolve_network "${BASH_SOURCE[0]:-$0}" "$@" || exit 1
 _source_installer_helper load-network.sh || exit 1
 load_network_profile "$NETWORK" "$SCRIPT_DIR"
 
-# Shown in help text (override in network profile)
-FULLNODE_INSTALLER_URL="${FULLNODE_INSTALLER_URL:-https://fullnode.testnet.coti.io}"
-FQDN_EXAMPLE="${FQDN_EXAMPLE:-node1.fullnode.testnet.coti.io}"
+FQDN_EXAMPLE="${FQDN_EXAMPLE:-node1.fullnode.${NETWORK}.coti.io}"
 
 print_welcome
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
