@@ -26,8 +26,19 @@ FULLNODE_EXT_IP = (os.environ.get("FULLNODE_EXT_IP") or "").strip()
 NGINX_ENABLED = os.environ.get("NGINX_ENABLED", "false").lower() == "true"
 FRPC_ENABLED = os.environ.get("FRPC_ENABLED", "false").lower() == "true"
 FRPC_CUSTOM_DOMAIN = (os.environ.get("FRPC_CUSTOM_DOMAIN") or "").strip()
-FRPS_SERVER_ADDR = (os.environ.get("FRPS_SERVER_ADDR") or os.environ.get("FRPS_SERVER_ADDR_1") or "").strip()
 FRPS_SERVER_PORT = int(os.environ.get("FRPS_SERVER_PORT", "7000") or "7000")
+
+
+def _frps_server_addrs() -> list[str]:
+    """Unique FRPS gateway hostnames (legacy FRPS_SERVER_ADDR, regional _1 / _2)."""
+    addrs: list[str] = []
+    seen: set[str] = set()
+    for key in ("FRPS_SERVER_ADDR", "FRPS_SERVER_ADDR_1", "FRPS_SERVER_ADDR_2"):
+        raw = (os.environ.get(key) or "").strip()
+        if raw and raw not in seen:
+            seen.add(raw)
+            addrs.append(raw)
+    return addrs
 
 
 def _normalize_dashboard_path(path: str) -> str:
@@ -323,28 +334,30 @@ def collect_status() -> dict[str, Any]:
         )
 
     # --- FRPC gateway reachability ---
-    if FRPC_ENABLED and FRPS_SERVER_ADDR:
-        try:
-            sock = socket.create_connection((FRPS_SERVER_ADDR, FRPS_SERVER_PORT), timeout=6)
-            sock.close()
-            out["checks"].append(
-                {
-                    "id": "frp_gateway",
-                    "label": "COTI gateway (tunnel)",
-                    "state": "ok",
-                    "detail": f"This machine can reach {FRPS_SERVER_ADDR}:{FRPS_SERVER_PORT} (needed for the RPC tunnel).",
-                }
-            )
-        except OSError as e:
-            out["checks"].append(
-                {
-                    "id": "frp_gateway",
-                    "label": "COTI gateway (tunnel)",
-                    "state": "bad",
-                    "detail": f"Cannot reach {FRPS_SERVER_ADDR}:{FRPS_SERVER_PORT} ({e!s}). "
-                    "Allow outbound traffic in the firewall.",
-                }
-            )
+    if FRPC_ENABLED:
+        frps_addrs = _frps_server_addrs()
+        for addr in frps_addrs:
+            try:
+                sock = socket.create_connection((addr, FRPS_SERVER_PORT), timeout=6)
+                sock.close()
+                out["checks"].append(
+                    {
+                        "id": f"frp_gateway_{addr}",
+                        "label": f"COTI gateway (tunnel): {addr}",
+                        "state": "ok",
+                        "detail": f"This machine can reach {addr}:{FRPS_SERVER_PORT} (needed for the RPC tunnel).",
+                    }
+                )
+            except OSError as e:
+                out["checks"].append(
+                    {
+                        "id": f"frp_gateway_{addr}",
+                        "label": f"COTI gateway (tunnel): {addr}",
+                        "state": "bad",
+                        "detail": f"Cannot reach {addr}:{FRPS_SERVER_PORT} ({e!s}). "
+                        "Allow outbound traffic in the firewall.",
+                    }
+                )
         if FRPC_CUSTOM_DOMAIN:
             base = FRPC_CUSTOM_DOMAIN.rstrip("/")
             tunnel_url = f"https://{base}/rpc"

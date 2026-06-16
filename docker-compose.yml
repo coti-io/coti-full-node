@@ -89,6 +89,7 @@ services:
       FRPC_CUSTOM_DOMAIN: ${FRPC_CUSTOM_DOMAIN:-}
       FRPS_SERVER_ADDR: ${FRPS_SERVER_ADDR:-}
       FRPS_SERVER_ADDR_1: ${FRPS_SERVER_ADDR_1:-virginia.fullnode.testnet.coti.io}
+      FRPS_SERVER_ADDR_2: ${FRPS_SERVER_ADDR_2:-frankfurt.fullnode.testnet.coti.io}
       FRPS_SERVER_PORT: ${FRPS_SERVER_PORT:-7000}
 
   # Internal HTTP gateway for FRPC: strips /rpc and /ws before forwarding to the node (no TLS).
