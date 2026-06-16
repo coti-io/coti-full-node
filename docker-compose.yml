@@ -1,33 +1,34 @@
 # Chain data uses a named volume so Geth can create geth.ipc (Unix socket). Bind-mounting
 # ./execution from WSL /mnt/c/... fails with "bind: operation not supported" for IPC.
-# Volume name is testnet-specific so a mainnet stack can use a separate volume (e.g. coti-mainnet-execution-data).
+# Volume name includes NETWORK so testnet and mainnet data stay separate on the same host.
 volumes:
-  coti-testnet-execution-data:
+  execution-data:
+    name: coti-${NETWORK:-testnet}-execution-data
 
 services:
   # Sets up the genesis configuration for the go-ethereum client from a JSON file.
-  coti-testnet-full-node-genesis:
-    image: coti/testnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
-    container_name: coti-testnet-full-node-genesis
+  coti-full-node-genesis:
+    image: coti/${NETWORK:-testnet}-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
+    container_name: coti-${NETWORK:-testnet}-full-node-genesis
     command: --datadir=/execution init /coti-genesis/genesis.json
     volumes:
-      - coti-testnet-execution-data:/execution
+      - execution-data:/execution
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "1"
 
-  coti-testnet-full-node:
-    image: coti/testnet-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
-    container_name: coti-testnet-full-node
+  coti-full-node:
+    image: coti/${NETWORK:-testnet}-full-node:${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}
+    container_name: coti-${NETWORK:-testnet}-full-node
     command:
       - --soda.engine
-      - --soda.seqaddr=0x7d9938777950631645B5B16057A2c52391a8e787
-      - --soda.exec1addr=0x787A4bB8677189682AD2AFf2becB78A2ED9d1241
-      - --soda.exec2addr=0x183B8933c370A2736c9766379349D72154Bd0b8f
+      - --soda.seqaddr=${COTI_SODA_SEQADDR}
+      - --soda.exec1addr=${COTI_SODA_EXEC1ADDR}
+      - --soda.exec2addr=${COTI_SODA_EXEC2ADDR}
       - --soda.validator
-      - --networkid=7082400
+      - --networkid=${COTI_NETWORK_ID}
       - --http
       - --http.api=eth,net,web3,txpool
       - --http.corsdomain=*
@@ -49,7 +50,7 @@ services:
       - --metrics.addr=0.0.0.0
       - --rpc.allow-unprotected-txs=true
       - --miner.gasprice=5000000
-      - --bootnodes=enode://8c14ae1db71cc9796bf04cf3cc5508291621bc8b9c4c80d4d7b79d8e4b33eadcfc2298242362443fd1317c5ac887dae8e8fe9c551d7792f2bc2e7177978f730a@147.135.77.48:7400,enode://820748e65666a7444199808ecbe80f4133fa9faa7618520eb6577466336daef7aa40910a2d03dd93766ccb7b93fecdfd1a9ff32e01217235fddc3c990928fa16@63.176.21.19:7400
+      - --bootnodes=${COTI_BOOTNODES}
       - --nat=extip:${FULLNODE_EXT_IP}
     ports:
       - "8545:8545"
@@ -57,10 +58,10 @@ services:
       - 7400:7400
       - 7400:7400/udp
     depends_on:
-      coti-testnet-full-node-genesis:
+      coti-full-node-genesis:
         condition: service_completed_successfully
     volumes:
-      - coti-testnet-execution-data:/execution
+      - execution-data:/execution
       - ./nodekey:/execution/geth/nodekey
     logging:
       driver: "json-file"
@@ -69,19 +70,19 @@ services:
         max-file: "5"
 
   # Local-only status page for operators (open http://127.0.0.1:8090 on the host).
-  coti-testnet-operator-dashboard:
+  coti-operator-dashboard:
     build:
       context: ./operator-dashboard
-    container_name: coti-testnet-operator-dashboard
+    container_name: coti-${NETWORK:-testnet}-operator-dashboard
     restart: unless-stopped
     depends_on:
-      coti-testnet-full-node:
+      coti-full-node:
         condition: service_started
     ports:
       - "127.0.0.1:8090:8090"
     environment:
       LISTEN_PORT: "8090"
-      RPC_URL: http://coti-testnet-full-node:8545
+      RPC_URL: http://coti-full-node:8545
       FULLNODE_FQDN: ${FULLNODE_FQDN:-}
       FULLNODE_EXT_IP: ${FULLNODE_EXT_IP:-}
       NGINX_ENABLED: ${NGINX_ENABLED:-false}
@@ -95,21 +96,21 @@ services:
   # Internal HTTP gateway for FRPC: strips /rpc and /ws before forwarding to the node (no TLS).
   nginx-frpc-gateway:
     image: nginx:1.15-alpine
-    container_name: coti-testnet-nginx-frpc-gateway
+    container_name: coti-${NETWORK:-testnet}-nginx-frpc-gateway
     restart: unless-stopped
     profiles:
       - frpc
     depends_on:
-      coti-testnet-full-node:
+      coti-full-node:
         condition: service_started
-      coti-testnet-operator-dashboard:
+      coti-operator-dashboard:
         condition: service_started
     volumes:
       - ./nginx/frpc-gateway.conf:/etc/nginx/conf.d/default.conf:ro
 
   frpc-1:
     image: fatedier/frpc:v0.61.2
-    container_name: coti-testnet-frpc-1
+    container_name: coti-${NETWORK:-testnet}-frpc-1
     restart: unless-stopped
     profiles:
       - frpc
@@ -124,7 +125,7 @@ services:
 
   frpc-2:
     image: fatedier/frpc:v0.61.2
-    container_name: coti-testnet-frpc-2
+    container_name: coti-${NETWORK:-testnet}-frpc-2
     restart: unless-stopped
     profiles:
       - frpc
@@ -155,9 +156,9 @@ services:
     profiles:
       - proxy-nginx
     depends_on:
-      coti-testnet-full-node:
+      coti-full-node:
         condition: service_started
-      coti-testnet-operator-dashboard:
+      coti-operator-dashboard:
         condition: service_started
     ports:
       - "80:80"

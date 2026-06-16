@@ -8,17 +8,10 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 DC="docker compose"
 
-# installer.env first (packaging defaults), then .env (this host).
-if [ -f installer.env ] || [ -f .env ]; then
-    set -a
-    # shellcheck source=/dev/null
-    [ -f installer.env ] && . ./installer.env
-    # shellcheck source=/dev/null
-    [ -f .env ] && . ./.env
-    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
-    export DOCKER_FULL_NODE_IMAGE_VERSION
-    set +a
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/source-env.sh
+. "$SCRIPT_DIR/scripts/source-env.sh"
+source_coti_env "$SCRIPT_DIR"
 
 # Enable every compose profile so `down` stops optional stacks too (frpc, nginx, nginx-init/setup).
 ALL_PROFILE_ARGS=(--profile frpc --profile proxy-nginx --profile setup)

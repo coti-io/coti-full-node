@@ -77,9 +77,6 @@ _docker_engine_avail_kb() {
     return 1
 }
 
-# Shown in help text (override if you mirror the installer elsewhere)
-FULLNODE_INSTALLER_URL="${FULLNODE_INSTALLER_URL:-https://fullnode.testnet.coti.io}"
-
 print_install_curl_examples() {
     _w "Linux, macOS, or Windows WSL (Ubuntu 24.04):"
     _w "  curl -sL ${FULLNODE_INSTALLER_URL} | sudo bash -s -- \"0x...\" \"your.domain\""
@@ -88,20 +85,29 @@ print_install_curl_examples() {
     _w "Native Windows is not supported for this installer; use WSL (Ubuntu 24.04) or a Linux host."
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
+# Network selection via --testnet / --mainnet (default: testnet).
+for _net_arg in "$@"; do
+    case "$_net_arg" in
+        --testnet) NETWORK=testnet ;;
+        --mainnet) NETWORK=mainnet ;;
+    esac
+done
+unset _net_arg
+
+: "${NETWORK:=testnet}"
+# shellcheck source=scripts/load-network.sh
+. "$SCRIPT_DIR/scripts/load-network.sh"
+load_network_profile "$NETWORK" "$SCRIPT_DIR"
+
+# Shown in help text (override in network profile)
+FULLNODE_INSTALLER_URL="${FULLNODE_INSTALLER_URL:-https://fullnode.testnet.coti.io}"
+FQDN_EXAMPLE="${FQDN_EXAMPLE:-node1.fullnode.testnet.coti.io}"
+
 print_welcome
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
 _w ""
-
-# Load installer configuration (if present) so key constants can be customized without editing this script.
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-INSTALLER_ENV_FILE="$SCRIPT_DIR/installer.env"
-if [ -f "$INSTALLER_ENV_FILE" ]; then
-    # shellcheck source=/dev/null
-    . "$INSTALLER_ENV_FILE"
-fi
-
-# Default values (can be overridden in installer.env)
-: "${DISK_SPACE_REQUIRED:=90}"      # GB
 
 print_requirements
 read -r -p "Press Enter to continue, or Ctrl+C to abort " < /dev/tty || true
@@ -109,7 +115,7 @@ _w ""
 
 _FRPS_SERVER_ADDR_1_FROM_ENV=false
 _FRPS_SERVER_ADDR_2_FROM_ENV=false
-# After sourcing installer.env: detect FRPS host vars before := defaults (matches empty assignment)
+# Detect FRPS host vars before profile defaults (matches empty assignment in environment)
 if declare -p FRPS_SERVER_ADDR_1 >/dev/null 2>&1; then
     _FRPS_SERVER_ADDR_1_FROM_ENV=true
 fi
@@ -118,16 +124,11 @@ if declare -p FRPS_SERVER_ADDR_2 >/dev/null 2>&1; then
 fi
 
 : "${DOCKER_FULL_NODE_IMAGE_VERSION:=1.2.0}"
-# IMAGE (optional, in installer.env) overrides DOCKER_FULL_NODE_IMAGE_VERSION for upgrades.
+# IMAGE (optional) overrides DOCKER_FULL_NODE_IMAGE_VERSION for upgrades.
 DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-$DOCKER_FULL_NODE_IMAGE_VERSION}"
-: "${CLONE_BRANCH:=coti-testnet}"
-# Default network label for this installer package (mainnet builds set NETWORK=mainnet here).
-: "${NETWORK:=testnet}"
 : "${NGINX_ENABLED:=false}"
 : "${FRPC_ENABLED:=false}"
 : "${FRPS_SERVER_ADDR:=}"
-: "${FRPS_SERVER_ADDR_1:=virginia.fullnode.testnet.coti.io}"
-: "${FRPS_SERVER_ADDR_2:=frankfurt.fullnode.testnet.coti.io}"
 : "${FRPS_SERVER_PORT:=7000}"
 : "${FRPC_CUSTOM_DOMAIN:=}"
 : "${FRPC_AUTH_TOKEN:=}"
@@ -149,6 +150,8 @@ _CLI_FRPC_ENABLE=false
 POSITIONAL=()
 for arg in "$@"; do
     case "$arg" in
+        --testnet|--mainnet)
+            ;;
         --with-nginx)
             NGINX_ENABLED=true
             COTI_TUNNEL_INSTALL=false
@@ -202,7 +205,7 @@ fi
 if [[ "$NGINX_ENABLED" == "true" && "$FRPC_ENABLED" == "true" ]]; then
     printf '%s\n' "${_Y}ERROR:${_R} Nginx/SSL and FRPC cannot both be enabled."
     _w "  • Use only one: ${_U}--with-nginx${_R} (host TLS) or ${_U}--with-frp${_R} (COTI tunnel)."
-    _w "  • If both are set via environment or installer.env, unset one before running."
+    _w "  • If both are set via environment or .env, unset one before running."
     exit 1
 fi
 
@@ -211,7 +214,7 @@ if [[ "${COTI_TUNNEL_INSTALL:-false}" == "true" ]] && [[ "$FRPC_ENABLED" != "tru
     exit 1
 fi
 
-# Legacy single gateway: apply FRPS_SERVER_ADDR where a region host was not set (installer.env) or overridden (CLI).
+# Legacy single gateway: apply FRPS_SERVER_ADDR where a region host was not set or overridden (CLI).
 if [ -n "${FRPS_SERVER_ADDR:-}" ]; then
     if [[ "$FRPS_SERVER_ADDR_1_EXPLICIT" != "true" ]] && [[ "$_FRPS_SERVER_ADDR_1_FROM_ENV" != "true" ]]; then
         FRPS_SERVER_ADDR_1="$FRPS_SERVER_ADDR"
@@ -247,6 +250,7 @@ if [ -z "$FQDN" ] || [ -z "$PK" ]; then
     _w ""
     print_install_curl_examples
     _w ""
+    _w "Network: --testnet (default) or --mainnet"
     _w "With Nginx + Let's Encrypt, append after the FQDN: --with-nginx"
     _w "Wizard tunnel (COTI subdomain + FRPC, no host TLS): --with-frp"
     exit 1
@@ -265,7 +269,7 @@ fi
 # Validate FQDN: hostname only (alphanumeric, hyphens, dots); prevents injection
 if [[ ! "$FQDN" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]] || [ "${#FQDN}" -gt 253 ]; then
     printf '%s\n' "${_Y}ERROR:${_R} FQDN must be a valid hostname (letters, numbers, hyphens, dots; 1–253 chars)."
-    _w "Example: node1.fullnode.testnet.coti.io"
+    _w "Example: ${FQDN_EXAMPLE}"
     exit 1
 fi
 
@@ -448,24 +452,9 @@ if [ -f "docker-compose.yml" ] || [ -d "coti-full-node" ]; then
     exit 1
 fi
 
-info "Cloning coti-full-node (${CLONE_BRANCH})..."
-git clone -b "$CLONE_BRANCH" https://github.com/coti-io/coti-full-node.git
+info "Cloning coti-full-node (main)..."
+git clone -b main https://github.com/coti-io/coti-full-node.git
 cd coti-full-node
-
-# Persist installation-level settings into the clone (image tag, network, etc.).
-# Per-host values go in .env; operators upgrade the container image by editing DOCKER_FULL_NODE_IMAGE_VERSION or IMAGE here.
-info "Writing installer.env (installation metadata)..."
-cat <<EOF > installer.env
-# Installation / packaging defaults for this checkout (not host-specific).
-# Per-host settings are in .env (sourced after this file by start/stop scripts).
-#
-# Bump DOCKER_FULL_NODE_IMAGE_VERSION (or set IMAGE=) to upgrade the node image, then run ./start_coti-full-node.sh
-
-DISK_SPACE_REQUIRED=${DISK_SPACE_REQUIRED}
-DOCKER_FULL_NODE_IMAGE_VERSION=${DOCKER_FULL_NODE_IMAGE_VERSION}
-CLONE_BRANCH=${CLONE_BRANCH}
-NETWORK=${NETWORK}
-EOF
 
 # --- 4. GENERATE .ENV FILE ---
 info "Writing .env..."
@@ -479,6 +468,11 @@ if [ -z "$EXT_IP" ]; then
 fi
 
 cat <<EOF > .env
+# Network and image (chain defaults load from networks/\${NETWORK}.env).
+# Bump DOCKER_FULL_NODE_IMAGE_VERSION (or set IMAGE=) to upgrade, then ./start_coti-full-node.sh
+NETWORK=${NETWORK}
+DOCKER_FULL_NODE_IMAGE_VERSION=${DOCKER_FULL_NODE_IMAGE_VERSION}
+
 FULLNODE_EXT_IP=$EXT_IP
 FULLNODE_FQDN=$FQDN
 NGINX_ENABLED=$NGINX_ENABLED
@@ -508,19 +502,19 @@ map \$http_upgrade \$connection_upgrade {
 }
 
 upstream fullnode_8545 {
-    server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
+    server coti-full-node:8545  max_fails=3 fail_timeout=30s;
 }
 
 upstream fullnode_8546 {
-    server coti-$NETWORK-full-node:8546  max_fails=3 fail_timeout=30s;
+    server coti-full-node:8546  max_fails=3 fail_timeout=30s;
 }
 
 upstream fullnode_6000 {
-    server coti-$NETWORK-full-node:6000  max_fails=3 fail_timeout=30s;
+    server coti-full-node:6000  max_fails=3 fail_timeout=30s;
 }
 
 upstream operator_dashboard_8090 {
-    server coti-$NETWORK-operator-dashboard:8090  max_fails=3 fail_timeout=30s;
+    server coti-operator-dashboard:8090  max_fails=3 fail_timeout=30s;
 }
 
 server {
@@ -625,19 +619,19 @@ map \$http_upgrade \$connection_upgrade {
 }
 
 upstream fullnode_8545 {
-    server coti-$NETWORK-full-node:8545  max_fails=3 fail_timeout=30s;
+    server coti-full-node:8545  max_fails=3 fail_timeout=30s;
 }
 
 upstream fullnode_8546 {
-    server coti-$NETWORK-full-node:8546  max_fails=3 fail_timeout=30s;
+    server coti-full-node:8546  max_fails=3 fail_timeout=30s;
 }
 
 upstream fullnode_6000 {
-    server coti-$NETWORK-full-node:6000  max_fails=3 fail_timeout=30s;
+    server coti-full-node:6000  max_fails=3 fail_timeout=30s;
 }
 
 upstream operator_dashboard_8090 {
-    server coti-$NETWORK-operator-dashboard:8090  max_fails=3 fail_timeout=30s;
+    server coti-operator-dashboard:8090  max_fails=3 fail_timeout=30s;
 }
 
 server {

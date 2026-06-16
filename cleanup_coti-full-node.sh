@@ -24,18 +24,13 @@ fi
 # Use script's directory (coti-full-node), NOT current working directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIR="$SCRIPT_DIR"
+
+# shellcheck source=scripts/source-env.sh
+. "$DIR/scripts/source-env.sh"
+source_coti_env "$DIR"
+
 DOMAIN=""
-if [ -f "$DIR/installer.env" ] || [ -f "$DIR/.env" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    [ -f "$DIR/installer.env" ] && . "$DIR/installer.env"
-    # shellcheck source=/dev/null
-    [ -f "$DIR/.env" ] && . "$DIR/.env"
-    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
-    export DOCKER_FULL_NODE_IMAGE_VERSION
-    set +a
-    DOMAIN="${FULLNODE_FQDN:-}"
-fi
+DOMAIN="${FULLNODE_FQDN:-}"
 
 echo "Cleaning up for fresh install test..."
 echo "Directory: $DIR"

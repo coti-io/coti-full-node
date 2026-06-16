@@ -15,6 +15,10 @@ DC="docker compose"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# shellcheck source=scripts/source-env.sh
+. "$SCRIPT_DIR/scripts/source-env.sh"
+source_coti_env "$SCRIPT_DIR"
+
 # --- ROOT CHECK ---
 if [ "$(id -u)" -ne 0 ]; then
     echo "This script must be run as root."
@@ -30,18 +34,6 @@ read -p "Continue? (y/N): " CONFIRM
 if [[ ! "$CONFIRM" =~ ^[yY] ]]; then
     echo "Aborted."
     exit 1
-fi
-
-# installer.env first (packaging defaults), then .env (this host).
-if [ -f installer.env ] || [ -f .env ]; then
-    set -a
-    # shellcheck source=/dev/null
-    [ -f installer.env ] && . ./installer.env
-    # shellcheck source=/dev/null
-    [ -f .env ] && . ./.env
-    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
-    export DOCKER_FULL_NODE_IMAGE_VERSION
-    set +a
 fi
 
 ALL_PROFILE_ARGS=(--profile frpc --profile proxy-nginx --profile setup)

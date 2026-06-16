@@ -4,15 +4,9 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Match start_coti-full-node.sh: installer defaults, then host .env.
-if [ -f installer.env ] || [ -f .env ]; then
-    set -a
-    # shellcheck source=/dev/null
-    [ -f installer.env ] && . ./installer.env
-    # shellcheck source=/dev/null
-    [ -f .env ] && . ./.env
-    set +a
-fi
+# shellcheck source=scripts/source-env.sh
+. "$SCRIPT_DIR/scripts/source-env.sh"
+source_coti_env "$SCRIPT_DIR"
 
 # RPC/WS are fixed at 8545/8546 on the host (see docker-compose.yml).
 RPC_URL="http://127.0.0.1:8545"

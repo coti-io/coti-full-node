@@ -14,17 +14,12 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 DC="docker compose"
 
-# installer.env = installation defaults (e.g. image tag); .env = this host (FQDN, keys, flags). Host values win on overlap.
-if [ -f installer.env ] || [ -f .env ]; then
-    set -a
-    # shellcheck source=/dev/null
-    [ -f installer.env ] && . ./installer.env
-    # shellcheck source=/dev/null
-    [ -f .env ] && . ./.env
-    DOCKER_FULL_NODE_IMAGE_VERSION="${IMAGE:-${DOCKER_FULL_NODE_IMAGE_VERSION:-1.2.0}}"
-    export DOCKER_FULL_NODE_IMAGE_VERSION
-    set +a
-else
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/source-env.sh
+. "$SCRIPT_DIR/scripts/source-env.sh"
+source_coti_env "$SCRIPT_DIR"
+
+if [ -z "${FULLNODE_EXT_IP:-}" ] && [ ! -f "$SCRIPT_DIR/.env" ]; then
     if ! FULLNODE_EXT_IP=$(curl -fsS --connect-timeout 10 --max-time 20 https://api.ipify.org); then
         echo "ERROR: Could not detect public IP (api.ipify.org). Set FULLNODE_EXT_IP or add .env." >&2
         exit 1
@@ -53,7 +48,7 @@ echo "Ensuring latest docker image version (${DOCKER_FULL_NODE_IMAGE_VERSION:-1.
 $DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG pull
 
 echo "Building operator status dashboard (local image, quick when cached)..."
-$DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG build coti-testnet-operator-dashboard
+$DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG build coti-operator-dashboard
 
 echo "Starting COTI full node services..."
 $DC $NGINX_PROFILE_ARG $FRPC_PROFILE_ARG up -d
