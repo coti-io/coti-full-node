@@ -27,6 +27,22 @@ NGINX_ENABLED = os.environ.get("NGINX_ENABLED", "false").lower() == "true"
 FRPC_ENABLED = os.environ.get("FRPC_ENABLED", "false").lower() == "true"
 FRPC_CUSTOM_DOMAIN = (os.environ.get("FRPC_CUSTOM_DOMAIN") or "").strip()
 FRPS_SERVER_PORT = int(os.environ.get("FRPS_SERVER_PORT", "7000") or "7000")
+NETWORK = (os.environ.get("NETWORK") or "testnet").strip().lower()
+
+_DEFAULT_FRPS_BY_NETWORK: dict[str, list[str]] = {
+    "testnet": [
+        "virginia.fullnode.testnet.coti.io",
+        "frankfurt.fullnode.testnet.coti.io",
+    ],
+    "mainnet": [
+        "virginia.fullnode.mainnet.coti.io",
+        "new-york.fullnode.mainnet.coti.io",
+    ],
+}
+
+
+def _default_frps_server_addrs() -> list[str]:
+    return list(_DEFAULT_FRPS_BY_NETWORK.get(NETWORK, _DEFAULT_FRPS_BY_NETWORK["testnet"]))
 
 
 def _frps_server_addrs() -> list[str]:
@@ -38,6 +54,11 @@ def _frps_server_addrs() -> list[str]:
         if raw and raw not in seen:
             seen.add(raw)
             addrs.append(raw)
+    if FRPC_ENABLED:
+        for raw in _default_frps_server_addrs():
+            if raw not in seen:
+                seen.add(raw)
+                addrs.append(raw)
     return addrs
 
 
