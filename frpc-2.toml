@@ -1,26 +1,10 @@
-serverAddr = "frankfurt.fullnode.mainnet.coti.io"
+# Example only — install_coti-full-node.sh overwrites this on --with-frp / --frpc-enabled=true.
+serverAddr = "new-york.fullnode.mainnet.coti.io"
 serverPort = 7000
 
 [[proxies]]
-name = "replace-me.fullnode.mainnet.coti.io-rpc"
+name = "replace-me.fullnode.mainnet.coti.io"
 type = "http"
-localIP = "coti-mainnet-full-node"
-localPort = 8545
+localIP = "nginx-frpc-gateway"
+localPort = 8080
 customDomains = ["replace-me.fullnode.mainnet.coti.io"]
-locations = ["/rpc"]
-
-[[proxies]]
-name = "replace-me.fullnode.mainnet.coti.io-ws"
-type = "http"
-localIP = "coti-mainnet-full-node"
-localPort = 8546
-customDomains = ["replace-me.fullnode.mainnet.coti.io"]
-locations = ["/ws"]
-
-[[proxies]]
-name = "replace-me.fullnode.mainnet.coti.io-operator"
-type = "http"
-localIP = "coti-mainnet-operator-dashboard"
-localPort = 8090
-customDomains = ["replace-me.fullnode.mainnet.coti.io"]
-locations = ["/operator"]
