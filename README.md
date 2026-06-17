@@ -10,7 +10,7 @@ This repository contains the necessary files and scripts to easily set up and ma
 
 ## Documentation
 
-Visit the [Running a COTI Node](https://docs.coti.io/coti-documentation/running-a-coti-node) section of the COTI Documentation for full instructions. The [node ecosystem installation guides](https://github.com/coti-io/documentation/tree/main/node-ecosystem) describe wizard flows in more detail.
+Visit the [Node Ecosystem](https://docs.coti.io/coti-documentation/node-ecosystem) section of the COTI Documentation for full instructions. The [node ecosystem installation guides](https://github.com/coti-io/documentation/tree/main/node-ecosystem) describe wizard flows in more detail.
 
 ### Automated install (`install_coti-full-node.sh`)
 
